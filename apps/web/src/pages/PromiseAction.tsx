@@ -38,7 +38,17 @@ const MODE_CONFIG: Record<
     lede: "Point at something anyone can open and check. Evidence is stored permanently and linked to this promise.",
     action: "Add evidence",
     cta: "Sign and add this evidence",
-    note: "Exact duplicates are rejected, so the same source and quote cannot be added twice.",
+    // Two things a contributor is entitled to know before spending a transaction.
+    //
+    // Exact duplicates are rejected, so the same source and quote cannot be added twice.
+    //
+    // And a resolution does not read every source: the contract fetches at most three
+    // admissible sources per resolution, to keep the prompt bounded. That limit was documented
+    // for operators but never shown to the person contributing evidence, which is exactly the
+    // wrong way round in a product whose claim is that the record stays inspectable. Adding a
+    // fourth source is still recorded and still visible — it is simply not guaranteed to be
+    // the one the validators read.
+    note: "Exact duplicates are rejected. A resolution reads at most 3 sources, so earlier admissible evidence is more likely to be weighed — but everything you add stays on the record either way.",
     fields: [
       {
         key: "sourceUrl",
