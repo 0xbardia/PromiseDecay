@@ -665,6 +665,58 @@ multi-word markers, unrelated substrings, and the severity ordering between bloc
 
 ---
 
+### PD-SEC-025 — Indexer polling exhausted the Studio daily quota on its own
+
+| | |
+|---|---|
+| **Severity** | High (availability of the whole chain-facing product) |
+| **Component** | `apps/indexer/src/worker.ts`, `apps/indexer/src/pacing.ts` |
+| **Status** | **Fixed** (limitation below remains) |
+
+**Description.** The indexer was configured with `INDEXER_INTERVAL_MS=15000`. A full pass takes
+around six minutes, so that setting was not pacing at all — the worker simply re-synced back to
+back, continuously, for as long as the process ran.
+
+Each pass costs `1 + 9 × promises` chain reads (the id list, then per promise the DNA, the
+lifecycle status, and seven child/result reads). At four promises that is 37 reads; continuous
+passing is 5,760 requested passes a day. The Studio endpoint allows 5,000 requests per day, so
+the indexer exhausted the shared quota by itself, and the endpoint began refusing everything:
+the API, the certification tooling, and an operator trying to use the chain all starved together.
+
+The symptom was misleading — a `5000 requests per day` refusal appearing long after anything had
+changed, with the indexer still reporting itself online.
+
+**Resolution.** The interval is now derived from the request budget and the live promise count
+(`INDEXER_DAILY_REQUEST_BUDGET`, default 2,500 — deliberately half the endpoint's limit so other
+consumers survive) rather than configured as a constant. At four promises that lands on a pass
+every ~21 minutes, about 2,479 requests a day. The math lives in `src/pacing.ts` with nine unit
+tests, because this failure mode is silent: nothing crashes, the endpoint just starts refusing.
+
+The dead `INDEXER_INTERVAL_MS` knob was removed rather than left in place looking authoritative.
+
+**Limitation that remains.** Once a single pass costs more than the whole daily budget — around
+278 promises — no interval can both sync daily and stay inside the budget. The indexer currently
+overshoots to preserve freshness. The real fix is architectural: reads should be incremental, so
+a pass costs what *changed* rather than the size of the dataset. This is pinned as a test
+(`cannot hold the budget once one pass exceeds it`) so it cannot be forgotten.
+
+---
+
+### PD-SEC-026 — The indexer's `test` script could not start
+
+| | |
+|---|---|
+| **Severity** | Low (tooling) |
+| **Component** | `apps/indexer/vitest.config.ts` |
+| **Status** | **Fixed** |
+
+**Description.** The indexer package declared `test: vitest run` but had no vitest config, so
+vitest walked up out of the package and picked up a config belonging to something else on the
+host, then failed with `Cannot find package 'vite'`. The indexer had no working test suite and
+the failure was reported as a missing dependency rather than a missing config.
+
+---
+
 ### PD-SEC-020 — Write flows were unreachable, and validation unreachable behind a disabled button
 
 | | |

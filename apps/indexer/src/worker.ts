@@ -8,6 +8,7 @@
 import { loadEnv } from "@promisedecay/config";
 // The indexer reuses the API's db/chain/indexer modules rather than copying them, so
 // there is exactly one projection implementation in the repository.
+import { intervalFor } from "./pacing.js";
 import { createDatabase } from "@promisedecay/api/db";
 import { GenlayerReader } from "@promisedecay/api/chain/reader";
 import { syncOnce } from "@promisedecay/api/indexer/sync";
@@ -40,12 +41,17 @@ let stopping = false;
 let timer: NodeJS.Timeout | null = null;
 let running = false;
 
+/** Promise count from the last completed pass; drives the pacing decision below. */
+let promiseCount = 0;
+let lastIntervalMs = 0;
+
 async function tick() {
   // Skip rather than overlap: a slow sync must not become a pile of concurrent ones.
   if (running || stopping) return;
   running = true;
   try {
-    await syncOnce(db, reader, logger);
+    const result = await syncOnce(db, reader, logger);
+    promiseCount = result.promiseCount;
   } catch (err) {
     logger.error({ err: (err as Error).message }, "sync failed; will retry next interval");
   } finally {
@@ -55,10 +61,22 @@ async function tick() {
 
 function schedule() {
   if (stopping) return;
+  const intervalMs = intervalFor(
+    promiseCount,
+    env.INDEXER_DAILY_REQUEST_BUDGET,
+    env.INDEXER_MIN_INTERVAL_MS
+  );
+  if (intervalMs !== lastIntervalMs) {
+    lastIntervalMs = intervalMs;
+    logger.info(
+      { promiseCount, intervalMs, minutes: +(intervalMs / 60_000).toFixed(1) },
+      "sync interval derived from the request budget"
+    );
+  }
   timer = setTimeout(async () => {
     await tick();
     schedule();
-  }, env.INDEXER_INTERVAL_MS);
+  }, intervalMs);
   // Do not hold the event loop open just for the next tick.
   timer.unref?.();
 }
@@ -87,7 +105,8 @@ logger.info(
   {
     network: env.GENLAYER_NETWORK,
     contract: env.GENLAYER_CONTRACT_ADDRESS,
-    intervalMs: env.INDEXER_INTERVAL_MS,
+    dailyRequestBudget: env.INDEXER_DAILY_REQUEST_BUDGET,
+    minIntervalMs: env.INDEXER_MIN_INTERVAL_MS,
   },
   "indexer starting"
 );

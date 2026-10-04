@@ -79,7 +79,6 @@ const schema = z.object({
     .optional(),
 
   // --- Indexer ------------------------------------------------------------------
-  INDEXER_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
   INDEXER_ENABLED: z
     .enum(["true", "false"])
     .default("true")
@@ -98,6 +97,14 @@ const schema = z.object({
   // --- Pagination ---------------------------------------------------------------
   DEFAULT_PAGE_SIZE: z.coerce.number().int().positive().max(100).default(25),
   MAX_PAGE_SIZE: z.coerce.number().int().positive().max(100).default(50),
+
+  // --- Indexer pacing -------------------------------------------------------------------
+  // The GenLayer Studio endpoint allows 5,000 requests per day. The indexer is given a share
+  // of that rather than the whole, so the API, certification tooling and operators can still
+  // use the chain. The worker converts this into an interval scaled by the promise count.
+  INDEXER_DAILY_REQUEST_BUDGET: z.coerce.number().int().positive().default(2_500),
+  // A pass takes minutes, so a shorter floor would only stack requests against the endpoint.
+  INDEXER_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(600_000),
 });
 
 export type Env = z.infer<typeof schema>;
