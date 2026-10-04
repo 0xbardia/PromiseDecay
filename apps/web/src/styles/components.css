@@ -40,13 +40,6 @@
   pointer-events: none;
 }
 
-.pd-glass--light {
-  background: var(--glass-fill-light, rgba(255, 255, 255, 0.05));
-  backdrop-filter: blur(var(--glass-blur-light));
-  -webkit-backdrop-filter: blur(var(--glass-blur-light));
-  box-shadow: var(--shadow-sm);
-}
-
 .pd-glass--heavy {
   background: var(--glass-fill-heavy);
   backdrop-filter: blur(26px) saturate(150%);
@@ -281,16 +274,6 @@
   background: var(--glass-fill);
 }
 
-.pd-btn--danger {
-  background: rgba(240, 68, 82, 0.14);
-  border-color: rgba(240, 68, 82, 0.4);
-  color: #ff9aa1;
-}
-
-.pd-btn--danger:hover:not(:disabled) {
-  background: rgba(240, 68, 82, 0.22);
-}
-
 .pd-btn--sm {
   padding: 8px 14px;
   min-height: 36px;
@@ -301,10 +284,6 @@
   padding: 15px 28px;
   min-height: 52px;
   font-size: 1.02rem;
-}
-
-.pd-btn--block {
-  width: 100%;
 }
 
 /* =====================================================================================

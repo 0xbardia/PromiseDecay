@@ -91,15 +91,6 @@ export const RELATION = {
 
 export type Relation = (typeof RELATION)[keyof typeof RELATION];
 
-export const RELATION_VALUES: readonly Relation[] = [
-  RELATION.SOFTENED,
-  RELATION.NARROWED,
-  RELATION.REFRAMED,
-  RELATION.REVERSED,
-  RELATION.FULFILLED_EARLY,
-  RELATION.UNRELATED,
-];
-
 // ---------------------------------------------------------------------------------------
 // Evidence kinds
 // ---------------------------------------------------------------------------------------
@@ -113,32 +104,9 @@ export const EVIDENCE_KIND = {
 
 export type EvidenceKind = (typeof EVIDENCE_KIND)[keyof typeof EVIDENCE_KIND];
 
-export const EVIDENCE_KIND_VALUES: readonly EvidenceKind[] = [
-  EVIDENCE_KIND.SOURCE,
-  EVIDENCE_KIND.ARTIFACT,
-  EVIDENCE_KIND.STATEMENT,
-  EVIDENCE_KIND.ABSENCE,
-];
-
 // ---------------------------------------------------------------------------------------
 // Records (mirror the contract's stored shapes)
 // ---------------------------------------------------------------------------------------
-
-export interface PromiseDna {
-  promiseId: string;
-  project: string;
-  actor: string;
-  originalQuote: string;
-  action: string;
-  object: string;
-  scope: string;
-  deadlineTs: number;
-  conditions: string;
-  sourceUrl: string;
-  creator: string;
-  createdTs: number;
-  contractVersion: string;
-}
 
 export interface EvidenceItem {
   submitter: string;

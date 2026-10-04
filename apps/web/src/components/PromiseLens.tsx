@@ -254,4 +254,3 @@ function lensPhaseColor(i: number): string {
   return PHASE_COLORS[i] ?? "var(--cobalt)";
 }
 
-export { FRAMES as LENS_FRAMES };

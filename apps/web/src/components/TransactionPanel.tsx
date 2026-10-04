@@ -134,18 +134,24 @@ export function TransactionPanel({
           {/* Stage track: completed stages, the active stage, and what comes next. */}
           <ol className="pd-tx__steps" style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {STAGE_ORDER.map((s, i) => {
-              const done = stage === "final" ? true : i < stageIndex;
-              const active = s === stage && stage !== "final" && stage !== "failed";
+              const failed = stage === "failed";
+              const done = stage === "final" ? true : !failed && i < stageIndex;
+              const active = s === stage && stage !== "final" && !failed;
               return (
                 <li
                   key={s}
                   className={
                     "pd-tx__step" +
                     (done ? " pd-tx__step--done" : "") +
-                    (active ? " pd-tx__step--active" : "")
+                    (active ? " pd-tx__step--active" : "") +
+                    // A failed transaction used to leave every stage rendered as "pending": no
+                    // step was done, none was active, so the track showed a journey that had
+                    // simply not started while the message above said it had ended. The whole
+                    // track now reads as failed.
+                    (failed ? " pd-tx__step--failed" : "")
                   }
                   data-testid={`tx-step-${s}`}
-                  data-state={done ? "done" : active ? "active" : "pending"}
+                  data-state={failed ? "failed" : done ? "done" : active ? "active" : "pending"}
                 >
                   {active ? <span className="pd-tx__spinner" aria-hidden="true" /> : null}
                   {STAGE_COPY[s]}

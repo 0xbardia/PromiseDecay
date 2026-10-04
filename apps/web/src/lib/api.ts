@@ -192,4 +192,3 @@ export const api = {
     }>("/config", signal),
 };
 
-export { BASE as API_BASE };

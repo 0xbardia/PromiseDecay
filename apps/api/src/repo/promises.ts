@@ -411,24 +411,4 @@ export async function searchPromises(
   };
 }
 
-// ---------------------------------------------------------------------------------------
-// Indexer bookkeeping
-// ---------------------------------------------------------------------------------------
-
-export async function setIndexerState(
-  db: Database,
-  key: string,
-  value: string
-): Promise<void> {
-  await db
-    .insert(indexerState)
-    .values({ key, value })
-    .onConflictDoUpdate({ target: indexerState.key, set: { value, updatedAt: new Date() } });
-}
-
-export async function getIndexerState(db: Database, key: string): Promise<string | null> {
-  const rows = await db.select().from(indexerState).where(eq(indexerState.key, key)).limit(1);
-  return rows[0]?.value ?? null;
-}
-
 export { buildSearchText, slugifyProject };

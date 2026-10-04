@@ -112,7 +112,7 @@ export function GlassSurface({
 }: {
   children: ReactNode;
   className?: string;
-  tone?: "default" | "light" | "heavy" | "flat";
+  tone?: "default" | "heavy" | "flat";
   as?: "div" | "section" | "article" | "aside" | "li";
 } & React.HTMLAttributes<HTMLElement>) {
   return (
@@ -458,10 +458,6 @@ export function Notice({
 // ---------------------------------------------------------------------------------------
 // Small shared pieces
 // ---------------------------------------------------------------------------------------
-
-export function MonoId({ children }: { children: ReactNode }) {
-  return <span className="pd-mono">{children}</span>;
-}
 
 export function Submitter({ address, verified }: { address: string; verified?: boolean }) {
   // Never claim authority that has not been verified.
