@@ -4,7 +4,7 @@
  * Only V1 is marked shipped, and only because it is verified on chain. Everything else
  * is labelled as planned, with no implied delivery dates.
  */
-import { GlassSurface, SectionHead } from "../components/primitives";
+import { GlassSurface } from "../components/primitives";
 
 interface RoadmapEntry {
   version: string;

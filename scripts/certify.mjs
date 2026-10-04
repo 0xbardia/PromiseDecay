@@ -137,7 +137,26 @@ console.log("=".repeat(96));
 console.log("contract :", ADDRESS);
 console.log("network  : studionet (chain 61999)");
 
-const schema = await rpc(() => client.getContractSchema(ADDRESS), "getContractSchema");
+async function fetchSchema() {
+  for (let attempt = 1; ; attempt++) {
+    await pace();
+    try {
+      return await client.getContractSchema(ADDRESS);
+    } catch (err) {
+      // The schema is a fixed property of the deployment, so any transport-level failure
+      // resolving it is transient by definition. Retrying is safe and terminating is not useful.
+      const seconds = attempt * 20;
+      console.error(
+        `   schema fetch failed (${String(err?.message ?? err).split("\n")[0].slice(0, 50)}); ` +
+          `retrying in ${seconds}s`
+      );
+      cooldownUntil = Date.now() + seconds * 1000;
+      if (attempt > 60) throw err;
+    }
+  }
+}
+
+const schema = await fetchSchema();
 const allMethods = Object.entries(schema.methods);
 const readMethods = allMethods.filter(([, m]) => m.readonly === true);
 const writeMethods = allMethods.filter(([, m]) => m.readonly !== true);

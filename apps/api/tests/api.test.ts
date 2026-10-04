@@ -247,6 +247,48 @@ describe("projects", () => {
     expect(res.json().items).toHaveLength(3);
   });
 
+  it("paginates projects with a working cursor", async () => {
+    // Regression test: `/api/v1/projects` used to accept a cursor, ignore it, and still hand
+    // back a `nextCursor`. Following that cursor returned page one forever, with nothing to
+    // signal the fault. A cursor that does not paginate is worse than no cursor.
+    await db.delete(projectsTable);
+    // Five projects with staggered activity, so the (latest_promise_ts DESC, slug DESC)
+    // ordering is unambiguous and keyset pagination is actually exercised.
+    for (let i = 0; i < 5; i++) {
+      await db.insert(projectsTable).values({
+        slug: `proj-${i}`,
+        name: `Project ${i}`,
+        actor: `Actor ${i}`,
+        promiseCount: 1,
+        finalCount: 0,
+        resolvedCount: 0,
+        openCount: 1,
+        latestPromiseTs: NOW - i * 1000,
+      });
+    }
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 5; page++) {
+      const url: string = `/api/v1/projects?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const res = await app.inject({ method: "GET", url });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      seen.push(...body.items.map((p: { slug: string }) => p.slug));
+      cursor = body.nextCursor ?? undefined;
+      if (!cursor) break;
+    }
+
+    // Every project appears exactly once, and in the documented order.
+    expect(seen).toEqual(["proj-0", "proj-1", "proj-2", "proj-3", "proj-4"]);
+    expect(new Set(seen).size).toBe(5);
+  });
+
+  it("rejects a malformed project cursor", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/v1/projects?cursor=not-a-cursor" });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("returns a project with its history", async () => {
     await db.insert(projectsTable).values({
       slug: "acme-protocol",

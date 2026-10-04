@@ -42,6 +42,10 @@ function defaultDeadline(): string {
 }
 
 export function Record() {
+  // Read once per mount. Reading the clock during render would make the validation memo
+  // impure and, worse, would never re-evaluate as the day rolls over.
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+
   const [form, setForm] = useState<FormState>({ ...EMPTY, deadline: defaultDeadline() });
   const [advanced, setAdvanced] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -71,7 +75,7 @@ export function Record() {
     else {
       const ts = Math.floor(new Date(`${form.deadline}T23:59:59Z`).getTime() / 1000);
       if (!Number.isFinite(ts)) e.deadline = "Enter a valid date.";
-      else if (ts <= Math.floor(Date.now() / 1000)) e.deadline = "The deadline must be in the future.";
+      else if (ts <= nowSeconds) e.deadline = "The deadline must be in the future.";
     }
     for (const k of ["actor", "action", "object", "scope", "conditions"] as const) {
       if (form[k].length > BOUNDS.MAX_SHORT) {
@@ -79,7 +83,7 @@ export function Record() {
       }
     }
     return e;
-  }, [form]);
+  }, [form, nowSeconds]);
 
   const valid = Object.keys(errors).length === 0;
 

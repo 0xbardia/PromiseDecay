@@ -84,6 +84,34 @@ export function decodeCursor(raw: string): Cursor {
   return { createdTs: result.data.c, promiseId: result.data.p };
 }
 
+/**
+ * Project cursor: the same keyset idea, over the project ordering.
+ *
+ * Projects sort by (latest_promise_ts DESC, slug DESC), so the cursor must carry both columns —
+ * slug alone is not unique enough to resume from, and latest_ts alone is not either.
+ */
+export type ProjectCursor = { latestPromiseTs: number | null; slug: string };
+
+export function encodeProjectCursor(c: ProjectCursor): string {
+  return Buffer.from(JSON.stringify({ t: c.latestPromiseTs, s: c.slug }), "utf8").toString(
+    "base64url"
+  );
+}
+
+export function decodeProjectCursor(raw: string): ProjectCursor {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    throw ApiError.badCursor();
+  }
+  const result = z
+    .object({ t: z.number().int().nullable(), s: z.string().min(1) })
+    .safeParse(parsed);
+  if (!result.success) throw ApiError.badCursor();
+  return { latestPromiseTs: result.data.t, slug: result.data.s };
+}
+
 export const limitSchema = z.coerce
   .number()
   .int()

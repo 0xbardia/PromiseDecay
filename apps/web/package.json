@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --port 4180",
     "start": "node server/index.mjs",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",

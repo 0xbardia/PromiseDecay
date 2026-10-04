@@ -10,7 +10,7 @@
  *  - Fault-tolerant. One bad promise is recorded as an error and the run continues; a
  *    transient RPC failure is retried with backoff rather than crashing the worker.
  */
-import { and, asc, eq, sql as dsql } from "drizzle-orm";
+import { eq, sql as dsql } from "drizzle-orm";
 import { slugifyProject } from "@promisedecay/domain";
 import type { Database } from "../db/client.js";
 import {

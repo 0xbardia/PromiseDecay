@@ -78,7 +78,19 @@ export function matchRoute(pathname: string): { path: string; params: Record<str
     for (let i = 0; i < rSeg.length; i++) {
       const r = rSeg[i]!;
       const c = cSeg[i]!;
-      if (r.startsWith(":")) params[r.slice(1)] = decodeURIComponent(c);
+      if (r.startsWith(":")) {
+        // decodeURIComponent throws on a malformed escape sequence, and this runs during
+        // render. A bad segment would therefore blank the whole page rather than fall
+        // through to the 404 route, so a failed decode is treated as "no match".
+        let decoded: string;
+        try {
+          decoded = decodeURIComponent(c);
+        } catch {
+          ok = false;
+          break;
+        }
+        params[r.slice(1)] = decoded;
+      }
       else if (r !== c) {
         ok = false;
         break;

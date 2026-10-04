@@ -3,7 +3,7 @@
  *
  * Every function returns plain data and is safe to call concurrently with the indexer.
  */
-import { and, asc, desc, eq, lt, or, sql as dsql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or, sql as dsql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { slugifyProject } from "@promisedecay/domain";
 import type { Database } from "../db/client.js";
@@ -16,7 +16,14 @@ import {
   projects,
   responses,
 } from "../db/schema.js";
-import { buildSearchText, encodeCursor, toPlainTsQuery, type Cursor } from "../lib/http.js";
+import {
+  buildSearchText,
+  encodeCursor,
+  encodeProjectCursor,
+  toPlainTsQuery,
+  type Cursor,
+  type ProjectCursor,
+} from "../lib/http.js";
 
 export interface PromiseRow {
   promiseId: string;
@@ -271,10 +278,36 @@ export async function getPromiseDetail(
 // Projects
 // ---------------------------------------------------------------------------------------
 
-export async function listProjects(db: Database, limit: number, cursor?: Cursor) {
+/**
+ * Projects, newest activity first, with keyset pagination.
+ *
+ * The cursor is applied rather than merely accepted. An earlier version took a `cursor`
+ * argument, ignored it, and still returned a `nextCursor` — so a client that followed the
+ * cursor would have been handed page one forever, with no error to signal the problem. A
+ * cursor that does not paginate is worse than no cursor, so it is implemented here.
+ */
+export async function listProjects(db: Database, limit: number, cursor?: ProjectCursor) {
+  const where: SQL[] = [];
+
+  if (cursor) {
+    // Strictly "after" the cursor in (latest_promise_ts DESC, slug DESC) order. NULLs sort
+    // last under DESC in PostgreSQL, so a project with no promises is never skipped: it is
+    // only ever reached on a cursor whose timestamp is already NULL.
+    const ts = cursor.latestPromiseTs === null ? null : Number(cursor.latestPromiseTs);
+    where.push(
+      ts === null
+        ? isNull(projects.latestPromiseTs)
+        : or(
+            lt(projects.latestPromiseTs, ts),
+            and(eq(projects.latestPromiseTs, ts), lt(projects.slug, cursor.slug))
+          )!
+    );
+  }
+
   const rows = await db
     .select()
     .from(projects)
+    .where(where.length ? and(...where) : undefined)
     .orderBy(desc(projects.latestPromiseTs), desc(projects.slug))
     .limit(limit + 1);
 
@@ -293,7 +326,13 @@ export async function listProjects(db: Database, limit: number, cursor?: Cursor)
       openCount: p.openCount,
       latestPromiseTs: p.latestPromiseTs === null ? null : toNumber(p.latestPromiseTs),
     })),
-    nextCursor: hasMore && last ? last.slug : null,
+    nextCursor:
+      hasMore && last
+        ? encodeProjectCursor({
+            latestPromiseTs: last.latestPromiseTs === null ? null : toNumber(last.latestPromiseTs),
+            slug: last.slug,
+          })
+        : null,
   };
 }
 

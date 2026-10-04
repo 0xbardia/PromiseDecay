@@ -72,12 +72,6 @@ export function Explore() {
     void load(null, "replace");
   }, [load]);
 
-  // Reset pagination whenever a filter changes.
-  useEffect(() => {
-    setItems([]);
-    setCursor(null);
-  }, [submitted, lifecycle, delivery]);
-
   const activeFilters = useMemo(
     () => [lifecycle, delivery].filter(Boolean).length + (submitted ? 1 : 0),
     [lifecycle, delivery, submitted]

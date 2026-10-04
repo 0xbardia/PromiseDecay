@@ -15,6 +15,7 @@ import {
   ApiError,
   ErrorCode,
   decodeCursor,
+  decodeProjectCursor,
   limitSchema,
   resolveLimit,
 } from "./lib/http.js";
@@ -200,9 +201,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   app.get("/api/v1/projects", async (req) => {
-    const q = z.object({ limit: limitSchema }).parse(req.query);
+    const q = z.object({ limit: limitSchema, cursor: z.string().min(1).optional() }).parse(req.query);
     const limit = resolveLimit(q.limit, env.MAX_PAGE_SIZE, env.DEFAULT_PAGE_SIZE);
-    return listProjects(db, limit);
+    return listProjects(db, limit, q.cursor ? decodeProjectCursor(q.cursor) : undefined);
   });
 
   app.get("/api/v1/projects/:slug", async (req) => {
