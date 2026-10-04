@@ -861,7 +861,16 @@ class PromiseDecay(gl.Contract):
             if body.strip() == "":
                 body = "(no retrievable source text was available)"
 
-            prompt = _build_prompt(quote, deadline_ts, body, self._now())
+            # `now` is the value captured before this block, not a fresh clock read.
+            #
+            # The non-deterministic block must be fed identical inputs by every validator that
+            # evaluates it, otherwise they are answering subtly different questions and a
+            # disagreement stops meaning what it looks like it means. Reading the clock inside
+            # the closure made that depend on GenVM wiring `datetime.now()` to the transaction
+            # timestamp -- which `_now`'s docstring asserts, but which consensus correctness
+            # should not rest on. The value is already in scope; hoisting it removes the
+            # assumption entirely.
+            prompt = _build_prompt(quote, deadline_ts, body, now)
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
             return _bound(_as_json_text(raw), MAX_PROMPT_CHARS)
 
@@ -1003,7 +1012,16 @@ class PromiseDecay(gl.Contract):
                 body += "\n"
             if body.strip() == "":
                 body = "(no retrievable source text was available)"
-            prompt = _build_prompt(quote, deadline_ts, body, self._now())
+            # `now` is the value captured before this block, not a fresh clock read.
+            #
+            # The non-deterministic block must be fed identical inputs by every validator that
+            # evaluates it, otherwise they are answering subtly different questions and a
+            # disagreement stops meaning what it looks like it means. Reading the clock inside
+            # the closure made that depend on GenVM wiring `datetime.now()` to the transaction
+            # timestamp -- which `_now`'s docstring asserts, but which consensus correctness
+            # should not rest on. The value is already in scope; hoisting it removes the
+            # assumption entirely.
+            prompt = _build_prompt(quote, deadline_ts, body, now)
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
             return _bound(_as_json_text(raw), MAX_PROMPT_CHARS)
 
