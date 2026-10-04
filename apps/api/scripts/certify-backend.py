@@ -170,13 +170,34 @@ for label, path, want_status, want_code in cases:
 # --- body limit ---------------------------------------------------------------------------
 big = b'{"padding":"' + b"A" * (2 * 1024 * 1024) + b'"}'
 s, b = call("/api/v1/promises", method="POST", body=big)
-check("oversized body rejected", s in (400, 413), f"status={s}")
+# A body this large may be answered with 413, or the connection may be dropped before a
+# response is written. Both are rejections; what must never happen is a 2xx, or a 5xx.
+check(
+    "oversized body is rejected, never served",
+    s is None or s in (400, 413, 431),
+    f"status={s} ({'connection dropped' if s is None else 'answered'})",
+)
+s2, after_body = call("/api/v1/promises?limit=1")
+check("service still healthy after oversized body", s2 == 200, f"status={s2}")
 
 # --- CORS ---------------------------------------------------------------------------------
 s, b = call("/api/v1/promises", headers={"Origin": "https://evil.example"})
 check("no CORS grant to foreign origin", s == 200 and not isinstance(b, bytes), f"status={s} (request completed; origin ignored for a public read API)")
 s, b = call("/api/v1/promises", headers={"Origin": "https://promisedecay.bydx.fun"})
 check("CORS allows the product origin", s == 200, f"status={s}")
+
+# --- SQL injection -------------------------------------------------------------------------
+# Runs BEFORE the rate-limit burst below. Previously it came after, so the burst had already
+# exhausted the window and this check read a 429 error body: the list came back empty and the
+# probe reported "after=0", which looked exactly like the injection had dropped the table.
+before = len(items)
+s, r = call("/api/v1/search?q=%27%3B%20DROP%20TABLE%20promises%3B--")
+s2, after = call("/api/v1/promises?limit=50")
+check(
+    "sql injection is inert (table intact)",
+    s == 200 and s2 == 200 and len(after.get("items", [])) == before,
+    f"before={before} after={len(after.get('items', []))} statuses=({s},{s2})",
+)
 
 # --- rate limiting (bounded burst) ---------------------------------------------------------
 # The window is far larger than a 60-request burst — measured at ~300 requests before 429, so a
@@ -206,15 +227,6 @@ text = json.dumps(b) if isinstance(b, dict) else str(b)
 leaked = [t for t in ("SELECT ", "postgres", "node_modules", "at Object.", "Traceback") if t in text]
 check("error body leaks no internals", not leaked, f"found={leaked or 'none'}")
 
-# --- SQL injection -------------------------------------------------------------------------
-before = len(items)
-s, r = call("/api/v1/search?q=%27%3B%20DROP%20TABLE%20promises%3B--")
-s2, after = call("/api/v1/promises?limit=50")
-check(
-    "sql injection is inert",
-    s == 200 and len(after.get("items", [])) == before,
-    f"before={before} after={len(after.get('items', []))}",
-)
 
 print(f"\n{'=' * 60}")
 failed = [r for r in results if not r[1]]

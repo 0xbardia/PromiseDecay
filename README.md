@@ -208,8 +208,8 @@ connection failure rather than an honest absence.
 
 ```bash
 pnpm -r typecheck                       # all packages
-pnpm --filter @promisedecay/api test    # 31 backend tests
-pnpm --filter @promisedecay/web test    # 38 frontend + security tests
+pnpm --filter @promisedecay/api test    # 44 backend tests
+pnpm --filter @promisedecay/web test    # 47 frontend + security tests
 
 .venv/bin/pytest tests/contract         # 146 Direct Mode contract tests
 ```

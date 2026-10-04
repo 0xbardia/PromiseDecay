@@ -31,9 +31,10 @@ for i in $(seq 1 240); do
     echo "[$(date -u +%H:%M:%SZ)] quota open after $i probe(s)"
     break
   fi
-  # 5 minutes between probes: each probe itself costs budget, and the window resets on a
-  # daily boundary, so there is nothing to gain by asking more often than that.
-  sleep 300
+  # 15 minutes between probes. The window was previously 5, which was frequent enough that
+  # the polling itself consumed part of the daily budget it was waiting for — the probe is not
+  # free, and checking more often does not detect the boundary any sooner.
+  sleep 900
 done
 
 if [[ "$OUT" != OK* ]]; then

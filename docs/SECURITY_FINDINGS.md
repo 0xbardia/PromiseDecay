@@ -476,7 +476,7 @@ shipped dependency with a published fix, and "we probably don't hit it" is not a
 **Fix.** Upgraded `drizzle-orm` to `^0.45.3` in `apps/api` and `apps/indexer`.
 
 **Verification.** `pnpm audit --prod` reports **no known vulnerabilities**. The upgrade is covered
-by the existing gate: `pnpm -r typecheck` clean, and the 33 backend tests — which exercise the
+by the existing gate: `pnpm -r typecheck` clean, and the 33 backend tests (count at the time of that finding) — which exercise the
 repository layer against a real PostgreSQL instance — pass unchanged.
 
 **Residual risk.** None identified. Worth re-running `pnpm audit` on every release: this advisory

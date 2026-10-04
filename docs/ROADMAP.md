@@ -26,7 +26,7 @@ The complete promise lifecycle, deployed on GenLayer Studionet and verified.
 - 146 Direct Mode contract tests green
 - Real Studio Mode transactions on Studionet, each reported with its hash
 - Deployed read-method certification: all PASS
-- 31 backend tests, 38 frontend tests, Playwright across three browsers
+- 44 backend tests, 47 frontend tests, 9 indexer tests, 203 Direct Mode, Playwright across three browsers
 - Security Review: 0 open Critical, 0 open High
 
 ---
