@@ -122,7 +122,7 @@ export const DOC_BODIES: Record<string, { title: string; sections: DocSection[] 
           },
           {
             kind: "p",
-            text: "The canonical example: “Public mainnet before September 30” followed by “Selected ecosystem partners receive access in September” resolves to PARTIAL delivery with NARROWED integrity. That is a first-class correct answer, not a hedge.",
+            text: "A worked example: “Public mainnet before September 30” followed by “Selected ecosystem partners receive access in September” resolves to PARTIAL delivery with NARROWED integrity. That is a first-class correct answer, not a hedge. It illustrates the shape of a supported finding — it is not a verdict from the records currently on chain, which all resolve UNRESOLVED because their evidence does not establish an outcome.",
           },
         ],
       },

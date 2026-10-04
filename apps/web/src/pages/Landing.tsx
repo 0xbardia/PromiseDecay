@@ -210,6 +210,13 @@ export function Landing() {
             </div>
 
             <GlassSurface tone="heavy" className="pd-glass__pad">
+              {/* The example verdict below is illustrative, not a live record. Every promise
+                  currently on chain resolves UNRESOLVED, because their evidence genuinely does
+                  not establish an outcome and the contract refuses to guess. Labelled so the
+                  rail reads as a demonstration of the mechanism rather than a result. */}
+              <p className="pd-muted" style={{ fontSize: "0.8rem", marginBottom: 12 }}>
+                Worked example — illustrative, not a live record
+              </p>
               <ol className="pd-rail" data-testid="landing-drift-example">
                 <li
                   className="pd-rail__step pd-rail__step--origin"

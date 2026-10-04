@@ -40,6 +40,12 @@ Delivery and integrity are two independent axes, never a single score:
 > Public mainnet before September 30 → *selected ecosystem partners receive access in September*
 > → `PARTIAL` delivery, `NARROWED` integrity
 
+That arrow is an illustration of the shape of a finding, **not a verdict from the deployed
+contract**. The public records currently on Studionet all resolve `UNRESOLVED` / `UNKNOWN` —
+their evidence genuinely does not establish what happened, and the contract refuses to invent an
+answer it cannot support. The example above is what a *supported* finding looks like when the
+evidence actually shows it.
+
 There is deliberately **no reputation score, no vote, no token, no staking and no ranking**. Users
 supply evidence; validators reach semantic consensus; the record stays inspectable.
 
