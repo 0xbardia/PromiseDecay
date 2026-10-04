@@ -1,0 +1,26 @@
+{
+  "name": "promisedecay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A public memory layer for promises, powered by GenLayer consensus.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @promisedecay/api db:migrate",
+    "db:reset": "pnpm --filter @promisedecay/api db:reset",
+    "indexer": "pnpm --filter @promisedecay/indexer start",
+    "contract:test": ".venv/bin/python -m pytest tests/contract -v",
+    "e2e": "pnpm --filter @promisedecay/web e2e"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

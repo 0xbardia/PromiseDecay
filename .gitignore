@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Environment — never commit real configuration
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# Test and tooling artifacts
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.vitest/
+artifacts/
+gltest.config.yaml
+
+# Local keys and scratch material (defence in depth)
+*.pem
+*.key
+keystore/
+.pd-deployer/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Python (contract tooling)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Local visual-QA captures (regenerate with: pnpm --filter @promisedecay/web screenshots)
+.qa/

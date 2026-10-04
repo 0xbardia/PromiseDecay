@@ -1,0 +1,970 @@
+/**
+ * Living Glass — component styles.
+ *
+ * The rule that keeps this from becoming decoration: glass is used where it separates
+ * layers of information, never on every container. Maximum three stacked blurred layers.
+ */
+
+/* =====================================================================================
+   GlassSurface — the base material
+   ===================================================================================== */
+
+.pd-glass {
+  position: relative;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  box-shadow: var(--shadow-md);
+}
+
+/* Crisp top edge highlight — this is what makes glass read as a physical surface. */
+.pd-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    160deg,
+    var(--glass-edge-strong) 0%,
+    rgba(255, 255, 255, 0.04) 38%,
+    transparent 62%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.pd-glass--light {
+  background: var(--glass-fill-light, rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(var(--glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--glass-blur-light));
+  box-shadow: var(--shadow-sm);
+}
+
+.pd-glass--heavy {
+  background: var(--glass-fill-heavy);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  box-shadow: var(--shadow-lg);
+}
+
+.pd-glass--flat {
+  background: var(--glass-fill);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.pd-glass__pad {
+  padding: clamp(18px, 2.6vw, 30px);
+}
+
+/* Interactive glass responds to the pointer with a small, restrained highlight. */
+.pd-glass--interactive {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.pd-glass--interactive:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-glass--interactive:active {
+  transform: translateY(-1px);
+}
+
+/* =====================================================================================
+   Navigation
+   ===================================================================================== */
+
+.pd-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(7, 9, 13, 0.72);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pd-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2.2vw, 30px);
+  height: 68px;
+}
+
+.pd-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 680;
+  font-size: 1.02rem;
+  letter-spacing: -0.028em;
+  flex-shrink: 0;
+}
+
+/* The brand mark is a small "promise lens": a ring with a recording dot. */
+.pd-brandmark {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: conic-gradient(from 210deg, var(--lime), var(--sky), var(--cobalt), var(--lime));
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.pd-brandmark::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink-950);
+}
+
+.pd-nav__links {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.6vw, 22px);
+  margin-left: auto;
+}
+
+.pd-nav__link {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.pd-nav__link:hover {
+  color: var(--text-primary);
+  background: var(--glass-fill);
+}
+
+.pd-nav__link[aria-current="page"] {
+  color: var(--text-primary);
+  background: var(--glass-fill-strong);
+}
+
+.pd-nav__burger {
+  display: none;
+  margin-left: auto;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .pd-nav__links {
+    display: none;
+  }
+  .pd-nav__burger {
+    display: inline-flex;
+  }
+  .pd-nav__links--open {
+    display: flex;
+    position: absolute;
+    top: 68px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 14px;
+    background: rgba(12, 17, 24, 0.97);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--glass-edge);
+    margin-left: 0;
+  }
+  .pd-nav__links--open .pd-nav__link {
+    padding: 12px 14px;
+    font-size: 0.98rem;
+  }
+  /* The wallet button stays reachable on mobile. */
+  .pd-nav__links--open .pd-nav__cta {
+    margin-top: 8px;
+    justify-content: center;
+  }
+}
+
+/* =====================================================================================
+   Buttons
+   ===================================================================================== */
+
+.pd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 12px 20px;
+  min-height: 44px; /* comfortable touch target */
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.pd-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pd-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pd-btn--primary {
+  background: var(--lime);
+  color: var(--ink-950);
+  box-shadow: 0 6px 22px rgba(199, 255, 74, 0.2);
+}
+
+.pd-btn--primary:hover:not(:disabled) {
+  background: #d4ff6b;
+  box-shadow: 0 8px 28px rgba(199, 255, 74, 0.3);
+}
+
+.pd-btn--secondary {
+  background: var(--glass-fill);
+  border-color: var(--glass-edge);
+  color: var(--text-primary);
+  backdrop-filter: blur(var(--glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--glass-blur-light));
+}
+
+.pd-btn--secondary:hover:not(:disabled) {
+  background: var(--glass-fill-strong);
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.pd-btn--ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--glass-fill);
+}
+
+.pd-btn--danger {
+  background: rgba(240, 68, 82, 0.14);
+  border-color: rgba(240, 68, 82, 0.4);
+  color: #ff9aa1;
+}
+
+.pd-btn--danger:hover:not(:disabled) {
+  background: rgba(240, 68, 82, 0.22);
+}
+
+.pd-btn--sm {
+  padding: 8px 14px;
+  min-height: 36px;
+  font-size: 0.86rem;
+}
+
+.pd-btn--lg {
+  padding: 15px 28px;
+  min-height: 52px;
+  font-size: 1.02rem;
+}
+
+.pd-btn--block {
+  width: 100%;
+}
+
+/* =====================================================================================
+   Chips / status
+   ===================================================================================== */
+
+.pd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--chip-color, var(--silver)) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chip-color, var(--silver)) 42%, transparent);
+  color: var(--chip-color, var(--silver));
+  white-space: nowrap;
+}
+
+/* The dot is decoration; the label carries the meaning, so colour is never the only cue. */
+.pd-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.pd-chip--lg {
+  padding: 8px 15px;
+  font-size: 0.86rem;
+  letter-spacing: 0.06em;
+}
+
+.pd-chip--neutral {
+  --chip-color: var(--silver);
+}
+
+/* =====================================================================================
+   PromiseCard — the signature component
+   ===================================================================================== */
+
+.pd-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(18px, 2.4vw, 26px);
+  border-radius: var(--radius-lg);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+/*
+ * Status-coloured refraction along the leading edge.
+ * This is what makes a card screenshot-worthy: the state is visible before you read it.
+ */
+.pd-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    118deg,
+    color-mix(in srgb, var(--card-accent, var(--cobalt)) 26%, transparent) 0%,
+    transparent 38%
+  );
+}
+
+.pd-card__edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    var(--card-accent, var(--cobalt)),
+    color-mix(in srgb, var(--card-accent, var(--cobalt)) 25%, transparent)
+  );
+}
+
+.pd-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.pd-card__project {
+  font-size: 0.95rem;
+  font-weight: 640;
+  letter-spacing: -0.015em;
+}
+
+.pd-card__id {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--text-tertiary);
+}
+
+.pd-card__quote {
+  margin: 4px 0 16px;
+  position: relative;
+  padding-left: 15px;
+}
+
+.pd-card__quote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.22em;
+  bottom: 0.22em;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--card-accent, var(--cobalt));
+  opacity: 0.55;
+}
+
+.pd-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+}
+
+.pd-card__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pd-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Link overlay: the whole card is clickable while inner links stay usable. */
+.pd-card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.pd-card__inner-link {
+  position: relative;
+  z-index: 2;
+}
+
+/* =====================================================================================
+   DriftRail — the memorable timeline
+   ===================================================================================== */
+
+.pd-rail {
+  position: relative;
+  padding-left: 34px;
+}
+
+/* The rail itself: a soft chromatic progression, not a grey line. */
+.pd-rail::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--cobalt) 0%,
+    var(--sky) 24%,
+    var(--amber) 48%,
+    var(--coral) 70%,
+    var(--lime) 100%
+  );
+  opacity: 0.6;
+}
+
+.pd-rail__step {
+  position: relative;
+  padding-bottom: 26px;
+}
+
+.pd-rail__step:last-child {
+  padding-bottom: 0;
+}
+
+.pd-rail__node {
+  position: absolute;
+  left: -34px;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink-900);
+  border: 2px solid var(--step-color, var(--cobalt));
+  display: grid;
+  place-items: center;
+}
+
+.pd-rail__node::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--step-color, var(--cobalt));
+}
+
+/* The original promise gets a filled, unmistakable node. */
+.pd-rail__step--origin .pd-rail__node {
+  background: var(--step-color, var(--cobalt));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--step-color, var(--cobalt)) 18%, transparent);
+}
+
+.pd-rail__step--origin .pd-rail__node::after {
+  background: var(--ink-950);
+}
+
+.pd-rail__date {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.pd-rail__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0 8px;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--step-color, var(--cobalt));
+}
+
+.pd-rail__statement {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.pd-rail__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.pd-rail__source:hover {
+  color: var(--sky);
+}
+
+/* Precise textual change highlighting. */
+.pd-diff-removed {
+  background: rgba(240, 68, 82, 0.16);
+  color: #ffb3b8;
+  text-decoration: line-through;
+  text-decoration-color: rgba(240, 68, 82, 0.75);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.pd-diff-added {
+  background: rgba(61, 229, 140, 0.16);
+  color: #86f0bb;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* =====================================================================================
+   Resolution panel
+   ===================================================================================== */
+
+.pd-resolution {
+  position: relative;
+  padding: clamp(20px, 2.8vw, 32px);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(
+      140deg,
+      color-mix(in srgb, var(--res-accent, var(--sky)) 13%, transparent),
+      transparent 58%
+    ),
+    var(--glass-fill);
+  border: 1px solid color-mix(in srgb, var(--res-accent, var(--sky)) 30%, var(--glass-edge));
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  overflow: hidden;
+}
+
+.pd-resolution__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.pd-verdict {
+  padding: 15px 17px;
+  border-radius: var(--radius-md);
+  background: var(--glass-fill-light, rgba(255, 255, 255, 0.05));
+  border: 1px solid color-mix(in srgb, var(--verdict-color, var(--sky)) 26%, transparent);
+}
+
+.pd-verdict__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 7px;
+}
+
+.pd-verdict__value {
+  font-size: 1.3rem;
+  font-weight: 680;
+  letter-spacing: -0.022em;
+  color: var(--verdict-color, var(--sky));
+  line-height: 1.15;
+}
+
+.pd-resolution__explanation {
+  font-size: 0.98rem;
+  line-height: 1.62;
+  color: var(--text-secondary);
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+/* =====================================================================================
+   Forms
+   ===================================================================================== */
+
+.pd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/*
+ * Reserved space for inline validation.
+ *
+ * The message is conditional, so without a slot the first error shoves every control below
+ * it down the page — enough to move a button out from under a pointer mid-click, and enough
+ * to register as Cumulative Layout Shift. One reserved line per field keeps the layout
+ * stable and reads as ordinary field rhythm rather than a placeholder.
+ */
+.pd-field__error-slot {
+  min-height: 1.3em;
+  margin-top: -2px;
+}
+
+.pd-field__error-slot:empty {
+  min-height: 0;
+}
+
+.pd-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pd-hint {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.pd-input,
+.pd-textarea,
+.pd-select {
+  width: 100%;
+  padding: 12px 14px;
+  min-height: 46px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.pd-textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.pd-input::placeholder,
+.pd-textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.pd-input:hover,
+.pd-textarea:hover,
+.pd-select:hover {
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-input:focus,
+.pd-textarea:focus,
+.pd-select:focus {
+  outline: none;
+  border-color: var(--lime);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 3px rgba(199, 255, 74, 0.16);
+}
+
+.pd-input[aria-invalid="true"],
+.pd-textarea[aria-invalid="true"] {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(240, 68, 82, 0.16);
+}
+
+.pd-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.83rem;
+  color: #ff9aa1;
+  line-height: 1.45;
+}
+
+.pd-counter {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.pd-counter--over {
+  color: var(--red);
+}
+
+/* =====================================================================================
+   Feedback: skeletons, empty, error, transaction
+   ===================================================================================== */
+
+.pd-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: pd-shimmer 1.5s linear infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes pd-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.pd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: clamp(36px, 6vw, 64px) clamp(18px, 3vw, 32px);
+}
+
+.pd-empty__mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  color: var(--text-secondary);
+}
+
+.pd-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  background: color-mix(in srgb, var(--notice-color, var(--cobalt)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--notice-color, var(--cobalt)) 34%, transparent);
+  color: var(--text-primary);
+}
+
+.pd-notice__title {
+  font-weight: 650;
+  margin-bottom: 2px;
+}
+
+.pd-notice__body {
+  color: var(--text-secondary);
+}
+
+/* Transaction lifecycle: each state is named, described, and colour-coded. */
+.pd-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(16px, 2.2vw, 22px);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+  border: 1px solid color-mix(in srgb, var(--tx-color, var(--cobalt)) 30%, var(--glass-edge));
+}
+
+.pd-tx__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pd-tx__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pd-tx__step--done {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-color: color-mix(in srgb, var(--green) 34%, transparent);
+}
+
+.pd-tx__step--active {
+  color: var(--lime);
+  background: color-mix(in srgb, var(--lime) 14%, transparent);
+  border-color: color-mix(in srgb, var(--lime) 44%, transparent);
+}
+
+.pd-tx__step--failed {
+  color: #ff9aa1;
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+
+.pd-tx__spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: pd-spin 720ms linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pd-tx__hash {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+/* =====================================================================================
+   Layout helpers
+   ===================================================================================== */
+
+.pd-section {
+  padding-block: clamp(56px, 9vw, 116px);
+}
+
+.pd-section__head {
+  max-width: 760px;
+  margin-bottom: clamp(28px, 4vw, 48px);
+}
+
+.pd-grid {
+  display: grid;
+  gap: clamp(14px, 1.8vw, 20px);
+}
+
+.pd-grid--cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+}
+
+.pd-grid--halves {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+}
+
+.pd-rule {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.14) 20%,
+    rgba(255, 255, 255, 0.14) 80%,
+    transparent
+  );
+}
+
+.pd-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-block: clamp(34px, 5vw, 56px);
+  margin-top: clamp(48px, 7vw, 90px);
+}
+
+/* Prevent horizontal overflow at every breakpoint. */
+#root,
+.pd-shell,
+body {
+  overflow-x: clip;
+}

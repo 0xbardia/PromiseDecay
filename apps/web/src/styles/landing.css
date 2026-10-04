@@ -1,0 +1,645 @@
+/* =====================================================================================
+   Promise Lens — the hero's interactive product visual
+   ===================================================================================== */
+
+.pd-lens {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: clamp(18px, 2.4vw, 26px);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(155deg, rgba(65, 105, 255, 0.14), transparent 46%),
+    linear-gradient(20deg, rgba(199, 255, 74, 0.07), transparent 42%),
+    var(--glass-fill-heavy);
+  border: 1px solid var(--glass-edge-strong);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+
+.pd-lens:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 4px;
+}
+
+.pd-lens__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pd-lens__phases {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pd-lens__phase-dot {
+  height: 3px;
+  flex: 1 1 0;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background var(--dur-slow) var(--ease-out);
+}
+
+.pd-lens__phase-dot--done {
+  background: var(--phase-color, var(--cobalt));
+}
+
+.pd-lens__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 232px;
+}
+
+.pd-lens__phase {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.pd-lens__quote {
+  position: relative;
+  font-size: clamp(1.16rem, 2.1vw, 1.6rem);
+  line-height: 1.34;
+  margin: 0;
+  min-height: 3.4em;
+}
+
+.pd-lens__quote-mark {
+  color: var(--cobalt);
+  font-size: 1.3em;
+  line-height: 0;
+  vertical-align: -0.18em;
+  margin-right: 2px;
+}
+
+/* Precise textual change inside the lens. Colour is reinforced by the strikethrough
+   and the underline, so it never relies on hue alone. */
+.pd-lens__removed {
+  position: relative;
+  color: #ffb3b8;
+  text-decoration: line-through;
+  text-decoration-color: var(--red);
+  text-decoration-thickness: 2px;
+}
+
+.pd-lens__added {
+  color: #86f0bb;
+  text-decoration: underline;
+  text-decoration-color: var(--green);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.pd-lens__note {
+  font-size: 0.93rem;
+  line-height: 1.55;
+  min-height: 2.9em;
+}
+
+.pd-lens__verdicts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.pd-lens__verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.pd-lens__verdict-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.pd-lens__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.pd-lens__btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.pd-lens__btn:hover {
+  background: var(--glass-fill-strong);
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-lens__btn:active {
+  transform: scale(0.94);
+}
+
+.pd-lens__dots {
+  display: flex;
+  gap: 7px;
+}
+
+.pd-lens__dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.pd-lens__dot--active {
+  background: var(--phase-color, var(--cobalt));
+  transform: scale(1.28);
+}
+
+/* =====================================================================================
+   Hero
+   ===================================================================================== */
+
+.pd-hero {
+  position: relative;
+  padding-block: clamp(44px, 7vw, 96px) clamp(40px, 6vw, 80px);
+}
+
+.pd-hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(30px, 4.4vw, 58px);
+  align-items: center;
+}
+
+@media (min-width: 1000px) {
+  .pd-hero__grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  }
+}
+
+.pd-hero__copy {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(18px, 2.4vw, 26px);
+  max-width: 640px;
+}
+
+.pd-hero__title {
+  margin: 0;
+}
+
+/* The brand line is set apart: it is the product's one memorable sentence. */
+.pd-hero__brandline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  align-self: flex-start;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.pd-hero__brandline span {
+  color: var(--lime);
+}
+
+.pd-hero__lede {
+  font-size: clamp(1.02rem, 1.45vw, 1.2rem);
+  line-height: 1.62;
+  color: var(--text-secondary);
+  max-width: 56ch;
+}
+
+.pd-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pd-hero__proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  padding-top: 6px;
+  font-size: 0.86rem;
+  color: var(--text-tertiary);
+}
+
+.pd-hero__proof strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* =====================================================================================
+   Landing sections
+   ===================================================================================== */
+
+.pd-steps {
+  display: grid;
+  gap: clamp(14px, 1.8vw, 20px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+}
+
+.pd-step {
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+
+.pd-step:hover {
+  transform: translateY(-3px);
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-step__num {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink-950);
+  background: var(--step-color, var(--lime));
+}
+
+.pd-step h3 {
+  font-size: 1.08rem;
+}
+
+.pd-step p {
+  font-size: 0.93rem;
+  line-height: 1.58;
+  color: var(--text-secondary);
+}
+
+.pd-split {
+  display: grid;
+  gap: clamp(24px, 3.4vw, 48px);
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/*
+ * Top-aligned variant.
+ *
+ * `align-items: center` is right when two columns are roughly the same height, but the Promise
+ * Drift section pairs a short heading with a timeline that can run several hundred pixels tall.
+ * Centring leaves the heading marooned in the middle of an empty column. Aligning to the start
+ * puts the prose beside the top of the timeline, where the eye enters the section, and the empty
+ * space falls to the bottom where it reads as breathing room rather than a hole.
+ */
+.pd-split--top {
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .pd-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  }
+  .pd-split--reverse > :first-child {
+    order: 2;
+  }
+}
+
+.pd-cta-panel {
+  padding: clamp(28px, 4vw, 52px);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(60% 120% at 15% 0%, rgba(199, 255, 74, 0.12), transparent 62%),
+    radial-gradient(50% 110% at 85% 100%, rgba(69, 184, 255, 0.12), transparent 60%),
+    var(--glass-fill);
+  border: 1px solid var(--glass-edge-strong);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.pd-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pd-metric__value {
+  font-size: 1.5rem;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+
+.pd-metric__label {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+/* Provenance list on the promise page. */
+.pd-kv {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 8px 18px;
+  font-size: 0.9rem;
+}
+
+.pd-kv dt {
+  color: var(--text-tertiary);
+}
+
+.pd-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .pd-kv {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px 0;
+  }
+  .pd-kv dd {
+    margin-bottom: 10px;
+  }
+}
+
+/* Docs layout */
+.pd-docs {
+  display: grid;
+  gap: clamp(22px, 3vw, 44px);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 1000px) {
+  .pd-docs {
+    grid-template-columns: 232px minmax(0, 1fr) 208px;
+  }
+}
+
+.pd-docs__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 88px;
+}
+
+@media (max-width: 999px) {
+  .pd-docs__nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+.pd-docs__nav a {
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.pd-docs__nav a:hover {
+  background: var(--glass-fill);
+  color: var(--text-primary);
+}
+
+.pd-docs__nav a[aria-current="page"] {
+  background: var(--glass-fill-strong);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pd-docs__toc {
+  position: sticky;
+  top: 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 1199px) {
+  .pd-docs__toc {
+    display: none;
+  }
+}
+
+.pd-docs__toc a {
+  color: var(--text-tertiary);
+  padding-left: 11px;
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.pd-docs__toc a:hover {
+  color: var(--text-primary);
+  border-left-color: var(--lime);
+}
+
+.pd-prose {
+  max-width: 72ch;
+}
+
+.pd-prose h2 {
+  margin-top: 46px;
+  margin-bottom: 14px;
+  font-size: clamp(1.45rem, 2.5vw, 1.85rem);
+  scroll-margin-top: 92px;
+}
+
+.pd-prose h3 {
+  margin-top: 30px;
+  margin-bottom: 10px;
+  font-size: 1.16rem;
+  scroll-margin-top: 92px;
+}
+
+.pd-prose p,
+.pd-prose li {
+  color: var(--text-secondary);
+  line-height: 1.72;
+  font-size: 0.98rem;
+}
+
+.pd-prose p {
+  margin-bottom: 15px;
+}
+
+.pd-prose ul,
+.pd-prose ol {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+
+.pd-prose li {
+  margin-bottom: 7px;
+}
+
+.pd-prose strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.pd-prose a {
+  color: var(--sky);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pd-code {
+  display: block;
+  padding: 15px 17px;
+  margin: 16px 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.68;
+  color: #cfe3ff;
+  background: rgba(3, 6, 12, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.pd-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0;
+  font-size: 0.88rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.pd-table th,
+.pd-table td {
+  padding: 10px 13px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  white-space: nowrap;
+}
+
+.pd-table th {
+  color: var(--text-tertiary);
+  font-weight: 650;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pd-table td {
+  color: var(--text-secondary);
+}
+
+.pd-callout {
+  padding: 16px 18px;
+  margin: 18px 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--callout-color, var(--cobalt)) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--callout-color, var(--cobalt)) 32%, transparent);
+  font-size: 0.93rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* Filter bar on /explore */
+.pd-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  position: sticky;
+  top: 78px;
+  z-index: 20;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.pd-filters__search {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.pd-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pd-filter-chip {
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.pd-filter-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--glass-edge-strong);
+}
+
+.pd-filter-chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--filter-color, var(--lime)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--filter-color, var(--lime)) 50%, transparent);
+  color: var(--filter-color, var(--lime));
+}

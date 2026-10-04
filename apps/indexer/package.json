@@ -1,0 +1,28 @@
+{
+  "name": "@promisedecay/indexer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/worker.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/worker.js",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@promisedecay/api": "workspace:*",
+    "@promisedecay/config": "workspace:*",
+    "@promisedecay/domain": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "genlayer-js": "^1.1.8",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

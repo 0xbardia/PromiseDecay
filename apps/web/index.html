@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PromiseDecay — a public memory layer for promises</title>
+    <meta
+      name="description"
+      content="PromiseDecay preserves public commitments, tracks how they change, and uses GenLayer consensus to determine what was actually delivered."
+    />
+    <meta name="theme-color" content="#07090D" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Social preview -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PromiseDecay — a public memory layer for promises" />
+    <meta
+      property="og:description"
+      content="Promises deserve a memory. Preserve what was said, track how it changed, and let GenLayer consensus decide what was delivered."
+    />
+    <meta property="og:url" content="https://promisedecay.bydx.fun" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!--
+      Fonts are self-hosted and preconnected so the first paint is not blocked on a
+      third party. `swap` keeps text readable while they load.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 40px; font-family: system-ui, sans-serif; color: #f7f9fc">
+        <h1>PromiseDecay</h1>
+        <p>
+          PromiseDecay needs JavaScript to browse promise records. The public API is
+          available without it: <a href="/api/v1/promises">/api/v1/promises</a>
+        </p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
