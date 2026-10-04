@@ -60,6 +60,35 @@ async function pace() {
   lastRequest = Date.now();
 }
 
+/**
+ * True when an error is transient transport noise rather than a real answer.
+ *
+ * A shared public endpoint behind a load balancer intermittently returns an HTML error page
+ * instead of JSON, so the failure surfaces as `Unexpected token '<', "<!DOCTYPE "...`. That is
+ * not a rate limit and not a contract fault — it is a momentary bad gateway, and the correct
+ * response is to wait and ask again rather than to abandon certification.
+ */
+function isTransient(err) {
+  const text = String(err?.message ?? err);
+  if (isRateLimitRejection(err)) return true;
+  if (/rate limit/i.test(text)) return true;
+  // HTML where JSON was expected: a gateway or proxy error page.
+  if (/<!DOCTYPE|<html/i.test(text)) return true;
+  if (/is not valid JSON|Unexpected token/i.test(text)) return true;
+  // Network-level failures.
+  if (/ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|fetch failed|network/i.test(text)) {
+    return true;
+  }
+  let node = err;
+  for (let d = 0; d < 4 && node; d++) {
+    if (node instanceof SyntaxError) return true;
+    const code = node?.code;
+    if (typeof code === "string" && /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN/.test(code)) return true;
+    node = node?.cause;
+  }
+  return false;
+}
+
 /** True when any link in the error chain looks like a node rate-limit rejection. */
 function isRateLimitRejection(err) {
   let node = err;
@@ -101,11 +130,12 @@ async function rpc(fn, label) {
       // The node advertises exactly how long its bucket needs to refill, which for the
       // hourly window can be minutes. Wait it out rather than giving up: certification
       // is read-only, so waiting is always safe.
-      const isRateLimit = retryAfter > 0 || /rate limit/i.test(text) || isRateLimitRejection(err);
-      if (isRateLimit) {
-        const wait = Math.max(retryAfter, 20) * 1000 + 2000;
+      const transient = isTransient(err);
+      if (transient) {
+        // Prefer the node's advice when it gave any; otherwise back off gently.
+        const wait = Math.max(retryAfter, 0) * 1000 + (retryAfter > 0 ? 2000 : 5000 * attempt);
         console.error(
-          `   rate limited on ${label} (attempt ${attempt}); waiting ${Math.round(wait / 1000)}s`
+          `   transient on ${label} (attempt ${attempt}); waiting ${Math.round(wait / 1000)}s`
         );
         cooldownUntil = Date.now() + wait;
         continue;
