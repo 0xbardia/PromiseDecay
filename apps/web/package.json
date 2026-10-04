@@ -14,7 +14,9 @@
     "e2e": "playwright test",
     "e2e:install": "playwright install --with-deps chromium firefox webkit",
     "screenshots": "node scripts/screenshots.mjs",
-    "tx-lifecycle": "node scripts/txlifecycle.mjs"
+    "tx-lifecycle": "node scripts/txlifecycle.mjs",
+    "journey": "node scripts/journey-checks.mjs",
+    "link-check": "node scripts/link-check.mjs"
   },
   "dependencies": {
     "@promisedecay/domain": "workspace:*",
