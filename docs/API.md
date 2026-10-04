@@ -33,7 +33,7 @@ Deployment identity, for the UI to display.
 
 ```json
 {
-  "contractAddress": "0x74f3E1E6c90b4Ff156FC01D564eB7DbBc865cC93",
+  "contractAddress": "0x5F1C5C97ec9040FC76394419De3159C401bBDc05",
   "network": "studionet",
   "chainId": 61999,
   "rpcUrl": "https://studio.genlayer.com/api"

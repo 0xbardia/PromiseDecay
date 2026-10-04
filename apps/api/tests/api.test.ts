@@ -24,7 +24,7 @@ const env = {
   GENLAYER_RPC_URL: "https://studio.genlayer.com/api",
   GENLAYER_CHAIN_ID: "61999",
   GENLAYER_NETWORK: "studionet",
-  GENLAYER_CONTRACT_ADDRESS: "0x74f3E1E6c90b4Ff156FC01D564eB7DbBc865cC93",
+  GENLAYER_CONTRACT_ADDRESS: "0x5F1C5C97ec9040FC76394419De3159C401bBDc05",
   INDEXER_INTERVAL_MS: "15000",
   INDEXER_ENABLED: "true",
   API_PORT: "4181",
@@ -340,6 +340,36 @@ describe("GET /api/v1/search", () => {
     // The table must still exist.
     const after = await app.inject({ method: "GET", url: "/api/v1/promises" });
     expect(after.statusCode).toBe(200);
+  });
+});
+
+describe("error shaping", () => {
+  it("never answers a client fault with 5xx", async () => {
+    // The rate limiter used to answer 500 (no `statusCode` in its error body), and the error
+    // handler then relabelled the rejection VALIDATION_FAILED. Pinned here at the boundary
+    // that matters: whatever a client does wrong, the status is a 4xx and the body carries a
+    // code and a request id.
+    //
+    // The throttling path itself is verified over HTTP rather than in-process, because
+    // @fastify/rate-limit keeps one store per process keyed by client IP — an in-process test
+    // shares budget with every other test in the run and cannot assert its own limit.
+    const abuse: Array<[string, string]> = [
+      ["/api/v1/promises?limit=0", "limit=0"],
+      ["/api/v1/promises?limit=-1", "limit=-1"],
+      ["/api/v1/promises?limit=abc", "limit=abc"],
+      ["/api/v1/promises?cursor=not-a-cursor", "bad cursor"],
+      ["/api/v1/promises/abc", "non-numeric id"],
+      ["/api/v1/projects?cursor=%%%", "bad project cursor"],
+    ];
+
+    for (const [url, label] of abuse) {
+      const res = await app.inject({ method: "GET", url });
+      expect(res.statusCode, `${label} must be 4xx, not 5xx`).toBeLessThan(500);
+      expect(res.statusCode, `${label} must be 4xx`).toBeGreaterThanOrEqual(400);
+      const body = res.json();
+      expect(typeof body.error?.code, `${label} error code`).toBe("string");
+      expect(body.error?.requestId, `${label} request id`).toBeTruthy();
+    }
   });
 });
 

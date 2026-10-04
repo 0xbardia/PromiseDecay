@@ -291,7 +291,22 @@ export function PromiseCard({ promise, priority = false }: { promise: PromiseCar
 
       <div className="pd-card__head">
         <div className="pd-grow">
-          <div className="pd-card__project">{promise.project}</div>
+          {/*
+            One link, stretched over the whole card via CSS.
+
+            Previously only a small "View record" button was a link, so clicking anywhere else
+            on a card did nothing at all — which is not what anyone expects from a feed of
+            records. The link is still a single tab stop with a single accessible name, and
+            the `::after` overlay is raised above it so nested controls keep working.
+          */}
+          <a
+            className="pd-card__project pd-card__link"
+            href={`/promises/${promise.promiseId}`}
+            data-testid="promise-card-open"
+          >
+            {promise.project}
+            <span className="pd-sr-only"> — open this promise</span>
+          </a>
           <span className="pd-card__id pd-mono pd-dim">{promiseRef(promise.promiseId)}</span>
         </div>
         <StatusChip value={promise.lifecycle} kind="lifecycle" />
@@ -322,7 +337,9 @@ export function PromiseCard({ promise, priority = false }: { promise: PromiseCar
         <a
           className="pd-btn pd-btn--secondary pd-btn--sm"
           href={`/promises/${promise.promiseId}`}
-          aria-label={`View promise ${promiseRef(promise.promiseId)}`}
+          // Starts with the visible text so the accessible name contains it (WCAG 2.5.3),
+          // then adds the id so several cards in a feed are distinguishable out of context.
+          aria-label={`View record ${promiseRef(promise.promiseId)}`}
           data-testid="promise-card-link"
         >
           View record

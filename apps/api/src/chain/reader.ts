@@ -347,18 +347,29 @@ export class GenlayerReader {
     return this.tryCall<ResolutionRaw>("get_final_result", [id]);
   }
 
-  /** A read that is allowed to fail (e.g. "no result yet"), without retry noise. */
+  /**
+   * A read whose *absence* is a legitimate answer — "this promise has no provisional result
+   * yet", "no final result" — reported as null rather than as an error.
+   *
+   * The subtlety this method exists to get right: a throttled or failed read is NOT the same
+   * thing as an absent value. Swallowing every error into `null` meant that during a rate-limit
+   * window every resolution in the product silently became "not resolved", and the indexer
+   * persisted that lie to the database. A momentary throttle could erase a verdict the chain
+   * had already finalized.
+   *
+   * So transport-level failures are re-thrown and the promise is left alone for this pass;
+   * only a genuine UserError — the contract saying "there is no such result" — yields null.
+   */
   private async tryCall<T>(functionName: string, args: unknown[] = []): Promise<T | null> {
     try {
-      const value = await this.limiter.run(() =>
-        this.client.readContract({
-          address: this.address as `0x${string}`,
-          functionName,
-          args: GenlayerReader.toArgs(args) as never,
-        })
-      );
-      return value as unknown as T;
-    } catch {
+      return await this.call<T>(functionName, args);
+    } catch (err) {
+      const info = GenlayerReader.rateLimitInfo(err);
+      if (info) {
+        this.limiter.penalise(info.retryAfterSeconds);
+        // Rethrown so the caller skips this promise entirely rather than recording absence.
+        throw new Error("RATE_LIMITED");
+      }
       // "No result yet" is an expected state, not an error.
       return null;
     }

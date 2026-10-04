@@ -29,14 +29,16 @@ What that means in practice:
 | Severity | Open | Fixed |
 |---|---|---|
 | Critical | 0 | 3 |
-| High | 0 | 7 |
-| Medium | 0 | 5 |
+| High | 0 | 9 |
+| Medium | 0 | 7 |
 | Low | 0 | 3 |
 | Informational | 1 | 0 |
 
-Findings PD-SEC-014a, PD-SEC-015 and PD-SEC-016 were added after the production deployment and
-browser-matrix pass, when verifying the running system surfaced defects that static review had not.
-`pnpm audit --prod` is now clean.
+Findings PD-SEC-014a through PD-SEC-017 were added after the production deployment and the
+browser-matrix pass, when verifying the *running* product surfaced defects that static review had
+not. PD-SEC-017 in particular was found by driving the dApp as a user with a mock wallet and
+deliberately hostile input, then probing the URL screen directly — not by reading it.
+`pnpm audit --prod` is clean.
 
 **Gate for v1.0.0:** 0 open Critical, 0 open High. Met.
 
@@ -479,6 +481,178 @@ repository layer against a real PostgreSQL instance — pass unchanged.
 
 **Residual risk.** None identified. Worth re-running `pnpm audit` on every release: this advisory
 was present from the first `pnpm install` and only surfaced when the audit was run explicitly.
+
+---
+
+### PD-SEC-017 — URL screen bypassed by non-canonical IP encodings
+
+| | |
+|---|---|
+| **Severity** | High |
+| **Component** | `contracts/PromiseDecay.py` (`_check_url`, `_is_ip_literal`), `packages/domain` (`checkSourceUrl`) |
+| **Status** | **Fixed** |
+
+**Description.** The deterministic URL screen is the control that stops a hostile or
+inward-pointing source URL from ever reaching `gl.nondet.web.render` or an LLM prompt. It
+recognised an IPv4 literal only when the host was four dotted octets.
+
+That missed five spellings, every one of which a browser or resolver treats as the same
+address:
+
+| Accepted input | Resolves to |
+|---|---|
+| `http://2130706433/` | 127.0.0.1 — decimal 32-bit form |
+| `http://0x7f000001/` | 127.0.0.1 — hex form |
+| `http://0x7f.0.0.1/` | 127.0.0.1 — hex octets |
+| `http://127.1/` | 127.0.0.1 — short form, padded with zeroes |
+| `http://127.0.0.1/` | 127.0.0.1 — trailing dot is the DNS root |
+| `http://localhost./` | loopback — same trailing-dot trick, defeating the name list |
+
+Confirmed by direct execution against the shipped `checkSourceUrl` before the fix: all six
+returned `ok: true`.
+
+**Impact.** The screen provided no protection against an SSRF-shaped URL. A user submitting
+evidence — or any actor able to get a URL recorded — could aim the contract's non-deterministic
+web fetch at loopback, a private range, or a cloud metadata endpoint, using a form the screen
+believed was a domain name.
+
+**Fix.** The rule is inverted in both implementations: a host counts as an address **unless it
+demonstrably is not one**.
+
+- anything containing `0x` is an address (whole host or per octet);
+- anything composed only of digits and dots, in one to four parts, is an address — a single
+  part is bounded by 2^32-1 rather than 255, since that is the decimal 32-bit form;
+- the host is normalised (lowercased, trailing dots stripped) *before* the blocked-name
+  comparison, so `localhost.` cannot slip past by one character.
+
+The asymmetry is deliberate: a false positive costs a legitimate numeric hostname, while a
+false negative lets a request reach loopback.
+
+**Verification.** Nine new cases in `tests/contract/test_url_rules.py` and nine mirrored in
+`apps/web/tests/domain.test.ts`, covering every encoding above plus the accepted-boundary set
+so the screen cannot simply be tightened into uselessness. Direct Mode went from 161 to **170
+passing**, and the frontend suite from 38 to **47**.
+
+**Residual risk.** The screen is lexical, not a resolver. A domain name that resolves to a
+private address (DNS rebinding, or a public name pointed at 127.0.0.1) still passes, because
+the contract has no resolver and cannot ask. Blocking that properly needs egress filtering at
+the fetch layer, which is outside the contract's reach — noted in the threat model.
+
+---
+
+### PD-SEC-020 — Write flows were unreachable, and validation unreachable behind a disabled button
+
+| | |
+|---|---|
+| **Severity** | Medium (availability / usability) |
+| **Component** | `apps/web/src/pages/PromiseAction.tsx` |
+| **Status** | **Fixed** |
+
+**Description.** Two defects, both found by driving the deployed write flows in a browser rather
+than by reading them.
+
+1. **The evidence form could never be submitted.** Its `kind` field is a `<select>` whose first
+   option was supplied by a render-time fallback (`value || field.options[0]`). The user saw
+   `SOURCE` selected, but `values.kind` stayed `""`, which validation reported as a missing
+   required field — so `valid` was permanently false and the submit button was permanently
+   disabled. The user was told to fix the highlighted fields while nothing was highlighted.
+
+2. **Field validation could never be displayed.** Errors were gated behind a single `touched` flag
+   set by the form's `onSubmit`. But the submit button is `disabled` while the form is invalid, and
+   a disabled button fires no submit event. The two conditions deadlocked: no error was ever
+   shown, and the hint beside the button read "Fix the highlighted fields before signing."
+
+A loopback URL was typed and confirmed to produce **zero** alerts, on all four write flows.
+
+**Impact.** Every write flow advertised by the product — evidence, later statement, response,
+challenge — was blocked at the last step, with copy that blamed the user for fields the form
+refused to describe. On a contract whose entire value is recording evidence, that is a functional
+failure of the primary journey, not a cosmetic one.
+
+**Fix.** Select defaults are seeded into state, so the displayed default *is* the value. Errors are
+tracked per field and shown once the user has engaged with that field (or attempted submit),
+matching the pattern already used on `/record`. Both verified in a real browser: after connecting a
+mock wallet, the evidence form's submit button becomes enabled.
+
+**Verification.** Confirmed end-to-end in Chromium with an injected EIP-1193 wallet: filling valid
+input and connecting enables submit; an SSRF-style URL now raises "Source URL must use a domain
+name, not a raw IP address." Playwright covers the reachable submit across all three engines.
+
+**Residual risk.** None identified.
+
+---
+
+### PD-SEC-018 — A throttled read silently erased resolutions from the product
+
+| | |
+|---|---|
+| **Severity** | High (correctness) |
+| **Component** | `apps/api/src/chain/reader.ts` (`tryCall`) |
+| **Status** | **Fixed** |
+
+**Description.** `tryCall` exists to model a legitimate absence: `get_provisional_result` raises
+`UserError` when a promise has not been resolved, and the API wants `null` for that rather than an
+exception. Its implementation caught **every** error and returned `null`.
+
+A rate-limit rejection is not an absence. Observed directly on the deployed contract: during a
+throttle window, `get_provisional_result` returned `RATE_LIMITED`, `tryCall` returned `null`, and
+the indexer persisted `delivery = null, integrity = null` — writing "this promise has not been
+resolved" over a verdict GenLayer had already reached. A promise displayed in
+`CHALLENGE_WINDOW` next to "No resolution yet", which is a self-contradiction.
+
+**Impact.** Under exactly the conditions the shared public RPC makes likely, the product showed —
+and the database stored — the absence of a resolution that existed on chain. The error is silent,
+so nothing in the logs distinguished it from a genuine "unresolved" promise. For a tool whose
+entire claim is that it remembers what was delivered, this is the worst class of bug available.
+
+**Fix.** `tryCall` now routes through the normal read path and distinguishes the two cases.
+A rate-limit rejection is recognised from its structured payload, penalises the limiter and is
+**rethrown**, so `indexOne` fails for that promise and the pass skips it — leaving the previously
+stored verdict untouched. Only a genuine `UserError` yields `null`.
+
+**Verification.** A regression test in `tests/indexer.test.ts` indexes a promise with a
+`PARTIAL`/`NARROWED` verdict, then re-indexes with the resolution read throwing `RATE_LIMITED`, and
+asserts the verdict survives and the promise is counted as `failed`. It fails against the previous
+implementation.
+
+**Residual risk.** None identified. The same class of bug — absence inferred from a failed read —
+is worth watching for anywhere else a nullable read is persisted.
+
+---
+
+### PD-SEC-019 — API answered a throttled request with 500 and the wrong error code
+
+| | |
+|---|---|
+| **Severity** | Medium |
+| **Component** | `apps/api/src/server.ts` |
+| **Status** | **Fixed** |
+
+**Description.** Two compounding faults in the rate-limit path, found by probing the live API with
+340 rapid requests:
+
+1. `errorResponseBuilder` returned a body without `statusCode`, so Fastify fell back to **500**.
+2. The plugin's typed rejection then fell through to the generic error branch, which labelled it
+   `VALIDATION_FAILED` with **no message** — telling a throttled client its request was malformed.
+
+Measured before the fix: `300× 200, 40× 500`. After: `300× 200, 40× 429`, body
+`{"error":{"code":"RATE_LIMITED","message":"Too many requests. Try again in 40s."}}`.
+
+**Impact.** Refusals were reported as server faults. That pollutes 5xx dashboards with traffic that
+is entirely healthy, hides real outages in the noise, and misleads any client that retries on 5xx
+into amplifying the load the limiter exists to prevent.
+
+**Fix.** The rejection is recognised explicitly (`FST_ERR_RATE_LIMIT` or `statusCode === 429`) and
+answered with the standard error envelope. The message quotes the same value as the `Retry-After`
+header, so a client obeying either is told the same thing.
+
+**Verification.** Confirmed over HTTP against the deployed API. An in-process unit test was written
+and then removed: `@fastify/rate-limit` keeps one store per process keyed by client IP, so an
+in-process test shares its budget with every other test in the run and cannot assert its own
+limit — a test that cannot fail reliably is worse than none. The boundary that *is* deterministic
+(no client fault may ever produce a 5xx) is covered by an in-process test instead.
+
+**Residual risk.** None.
 
 ---
 

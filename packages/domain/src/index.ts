@@ -225,16 +225,64 @@ const BLOCKED_HOSTS = new Set([
 ]);
 
 /**
- * True when host is an IPv4 literal.
+ * True when `host` is any spelling of an IPv4 address rather than a DNS name.
  *
- * Leading zeros are deliberately NOT disqualifying: 010.0.0.1 is still an address, and a
- * resolver that reads it as octal would route somewhere the screen never inspected. It
- * must be rejected, not waved through as a hostname.
+ * A naive four-dotted-quad check is not enough, and the gap is not theoretical: every form
+ * below resolves to loopback in a browser or resolver, so accepting any of them defeats the
+ * screen entirely.
+ *
+ *   127.0.0.1        the plain quad
+ *   010.0.0.1        leading zero — some resolvers read the octet as octal
+ *   2130706433       decimal 2130706433, i.e. 127.0.0.1
+ *   0x7f000001       the same address in hex
+ *   127.1            short form; resolvers pad the missing octets with zero
+ *   127.0.1          three-part short form
+ *
+ * So the rule is inverted: a host is a literal unless it demonstrably is not one. Anything
+ * made only of digits, dots and an optional `0x` prefix is treated as an address, which
+ * errs toward rejection — a false positive costs a legitimate numeric hostname, a false
+ * negative lets a request reach loopback.
  */
 function isIpv4Literal(host: string): boolean {
+  if (host.length === 0) return false;
+
+  // Hex form, whole host (0x7f000001) or per octet (0x7f.0.0.1). A "0x" anywhere in the
+  // host means it is written as a number, which is the question this function answers.
+  if (host.includes("0x")) return true;
+
+  // Only digits and dots may appear, or it is plainly a name.
+  if (!/^[0-9.]+$/.test(host)) return false;
+
   const parts = host.split(".");
-  if (parts.length !== 4) return false;
-  return parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
+  if (parts.length === 0 || parts.length > 4) return false;
+
+  // A single part is the 32-bit form: 2130706433 is 127.0.0.1, so it runs to ten digits
+  // rather than three, and is bounded by 2^32-1 rather than 255.
+  if (parts.length === 1) {
+    const only = parts[0] ?? "";
+    return /^\d{1,10}$/.test(only) && Number(only) <= 4294967295;
+  }
+
+  // Two to four parts are a dotted quad in some short form. Reject empty parts ("1..2.3")
+  // and anything over 255.
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return false;
+    if (Number(part) > 255) return false;
+  }
+  return true;
+}
+
+/**
+ * Normalise a host for screening.
+ *
+ * A trailing dot denotes the DNS root and resolves identically — `localhost.` is loopback —
+ * so it must be stripped before any name comparison, or the blocked-name list is trivially
+ * bypassed by appending one character.
+ */
+function normalizeHost(host: string): string {
+  let h = host.toLowerCase();
+  while (h.endsWith(".")) h = h.slice(0, -1);
+  return h;
 }
 
 export function checkSourceUrl(raw: string): { ok: true } | { ok: false; reason: UrlRejection } {
@@ -273,7 +321,8 @@ export function checkSourceUrl(raw: string): { ok: true } | { ok: false; reason:
   }
 
   if (host.length === 0) return { ok: false, reason: "no-host" };
-  host = host.toLowerCase();
+  host = normalizeHost(host);
+  if (host.length === 0) return { ok: false, reason: "no-host" };
 
   if (portPart.length > 0) {
     if (!/^\d+$/.test(portPart)) return { ok: false, reason: "invalid-port" };
@@ -282,6 +331,7 @@ export function checkSourceUrl(raw: string): { ok: true } | { ok: false; reason:
     if (!ALLOWED_PORTS.has(port)) return { ok: false, reason: "unusual-port" };
   }
 
+  // Re-screen after normalisation so `localhost.` and `LOCALHOST.` are both caught.
   if (BLOCKED_HOSTS.has(host) || host.endsWith(".localhost")) {
     return { ok: false, reason: "localhost" };
   }

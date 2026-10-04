@@ -59,6 +59,7 @@ function fakeReader(promises: FakePromise[], overrides: Record<string, unknown> 
   };
 
   return {
+    contractAddress: (overrides.contractAddress as string) ?? "0xFAKE",
     getAllPromiseIds: async () => promises.map((p) => p.id),
     getPromise: async (id: string) => {
       const p = promises.find((x) => x.id === id);
@@ -147,6 +148,11 @@ afterAll(async () => {
 
 beforeEach(wipe);
 
+async function countPromises(): Promise<number> {
+  const rows = await db.select().from(promisesTable);
+  return rows.length;
+}
+
 describe("indexer idempotency", () => {
   it("indexes every promise", async () => {
     const result = await syncOnce(db, fakeReader(SAMPLE), silent);
@@ -177,6 +183,43 @@ describe("indexer idempotency", () => {
     const key = (r: typeof first) =>
       `${r.promiseId}|${r.project}|${r.originalQuote}|${r.lifecycle}|${r.delivery}|${r.integrity}|${r.isFinal}`;
     expect(second.map(key).sort()).toEqual(first.map(key).sort());
+  });
+});
+
+describe("projection fidelity", () => {
+  it("discards records belonging to a different contract", async () => {
+    // Regression test: the indexer only ever upserted, so repointing the deployment at a new
+    // contract left the previous deployment's promises visible in the product — records the
+    // site attributed to a contract that does not contain them.
+    await syncOnce(db, fakeReader(SAMPLE, { contractAddress: "0xAAAA" }) as never, silent);
+    const afterFirst = await countPromises();
+    expect(afterFirst).toBe(SAMPLE.length);
+
+    // Same address: nothing is thrown away.
+    await syncOnce(db, fakeReader(SAMPLE, { contractAddress: "0xAAAA" }) as never, silent);
+    expect(await countPromises()).toBe(SAMPLE.length);
+
+    // New address, different content: the old records must not survive.
+    await syncOnce(db, fakeReader([SAMPLE[0]], { contractAddress: "0xBBBB" }) as never, silent);
+    const afterSwitch = await countPromises();
+    expect(afterSwitch, "records from the previous contract were retained").toBe(1);
+
+    const rows = await db.select({ id: promisesTable.promiseId }).from(promisesTable);
+    expect(rows.map((r) => r.id)).toEqual([SAMPLE[0]!.id]);
+  });
+
+  it("prunes a promise the chain no longer reports", async () => {
+    // The contract is append-only, so this should not happen in production. It must still be
+    // handled: a projection that can only grow is not a projection.
+    await syncOnce(db, fakeReader(SAMPLE, { contractAddress: "0xCCCC" }) as never, silent);
+    expect(await countPromises()).toBe(SAMPLE.length);
+
+    const shrunk = SAMPLE.slice(0, 2);
+    await syncOnce(db, fakeReader(shrunk, { contractAddress: "0xCCCC" }) as never, silent);
+    expect(await countPromises()).toBe(shrunk.length);
+
+    const rows = await db.select({ id: promisesTable.promiseId }).from(promisesTable);
+    expect(rows.map((r) => r.id).sort()).toEqual(shrunk.map((p) => p.id).sort());
   });
 });
 
@@ -234,6 +277,53 @@ describe("fault tolerance", () => {
     // Restart with a healthy chain: the missing promise must appear.
     await syncOnce(db, fakeReader(SAMPLE), silent);
     expect((await db.select().from(promisesTable)).length).toBe(2);
+  });
+});
+
+describe("resolution integrity", () => {
+  it("does not record a verdict as absent when the read was merely throttled", async () => {
+    // Regression test with real consequences.
+    //
+    // `tryCall` used to swallow every error into `null`, on the reasonable-sounding assumption
+    // that a failed read means "no result yet". During a rate-limit window that assumption is
+    // simply false: it turned every resolution in the product into "not resolved", and the
+    // indexer wrote that to the database. A momentary throttle could erase a verdict the chain
+    // had already finalized.
+    //
+    // The fix is upstream in the reader, which now re-throws transport failures. This test
+    // pins the consequence at the boundary that matters — the indexer must leave the promise
+    // alone rather than overwrite good data with absence.
+    const withVerdict = fakeReader(SAMPLE, {
+      getProvisionalResult: async () => ({
+        delivery: "PARTIAL",
+        integrity: "NARROWED",
+        deadline_met: true,
+        material_scope_change: true,
+        explanation: "Partial delivery, narrowed scope.",
+        decided_ts: String(T0),
+      }),
+    });
+    await syncOnce(db, withVerdict, silent);
+
+    const before = await db.select().from(promisesTable);
+    expect(before.some((r) => r.delivery === "PARTIAL")).toBe(true);
+
+    // Now the resolution read fails the way a throttle does.
+    const throttled = fakeReader(SAMPLE, {
+      getProvisionalResult: async () => {
+        throw new Error("RATE_LIMITED");
+      },
+    });
+    const result = await syncOnce(db, throttled, silent);
+
+    // The promise was skipped, and counted as a failure rather than silently rewritten.
+    expect(result.failed).toBeGreaterThan(0);
+
+    // The existing verdict survives untouched.
+    const after = await db.select().from(promisesTable);
+    expect(after.some((r) => r.delivery === "PARTIAL"), "a throttled read erased a verdict").toBe(
+      true
+    );
   });
 });
 

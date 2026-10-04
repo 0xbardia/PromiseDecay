@@ -418,6 +418,62 @@
   letter-spacing: -0.015em;
 }
 
+/*
+ * Whole-card click target.
+ *
+ * The card is the obvious click target in a feed, so the primary link is stretched to cover
+ * it. This keeps a single tab stop and a single accessible name — the alternative, nesting a
+ * link around the card's contents, duplicates every link for screen-reader users.
+ *
+ * `.pd-card__foot` sits above the overlay so the explicit "View record" button remains its own
+ * click target, and the whole card gains a visible hover/focus affordance.
+ */
+.pd-card__link {
+  position: static;
+  color: inherit;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.pd-card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+}
+
+.pd-card__foot,
+.pd-card__foot a {
+  position: relative;
+  z-index: 2;
+}
+
+.pd-card:has(.pd-card__link:hover),
+.pd-card:has(.pd-card__link:focus-visible) {
+  border-color: var(--glass-edge-strong);
+  background: var(--glass-fill-strong);
+}
+
+/* Keyboard focus lands on the invisible overlay, so show the ring on the card itself. */
+.pd-card:has(.pd-card__link:focus-visible) {
+  outline: 2px solid var(--sky);
+  outline-offset: 3px;
+}
+
+/* Screen-reader-only text. */
+.pd-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .pd-card__id {
   display: inline-block;
   margin-top: 3px;
@@ -476,7 +532,15 @@
   z-index: 1;
 }
 
-.pd-card__inner-link {
+/*
+ * Standalone source links are interactive controls, so they need a 24px minimum target
+ * (WCAG 2.2 "Target Size (Minimum)"). At 21px they were measurably short of it on a phone.
+ * Inline links inside a sentence are exempt, so this only pads the standalone variant.
+ */
+.pd-inner-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   position: relative;
   z-index: 2;
 }

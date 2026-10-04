@@ -50,6 +50,16 @@ export interface SyncResult {
 const CHECKPOINT_KEY = "last_sync_at";
 
 /**
+ * Which contract this projection was built from.
+ *
+ * Recorded so a change of `GENLAYER_CONTRACT_ADDRESS` is noticed rather than silently
+ * ignored. Without it the indexer only ever upserts, so pointing the deployment at a new
+ * contract leaves the previous deployment's records visible in the product forever — the
+ * site would show promises that do not exist on the chain it claims to be reading.
+ */
+const SOURCE_KEY = "source_contract";
+
+/**
  * Replace a promise's child collections wholesale.
  *
  * The contract's child arrays are append-only, so a full replace is both correct and
@@ -249,6 +259,65 @@ async function rebuildProjects(db: Database): Promise<number> {
 }
 
 /**
+ * Make the projection describe exactly one contract.
+ *
+ * If the recorded source differs from the configured address, every projected row belongs to a
+ * contract this process no longer reads, so it is discarded and the pass rebuilds from
+ * scratch. This is a derived cache — throwing it away is always safe, and keeping it would be
+ * actively wrong.
+ */
+async function alignProjectionToContract(
+  db: Database,
+  contract: string,
+  logger: IndexerLogger
+): Promise<void> {
+  const rows = await db
+    .select({ value: indexerState.value })
+    .from(indexerState)
+    .where(eq(indexerState.key, SOURCE_KEY))
+    .limit(1);
+
+  const recorded = rows[0]?.value ?? null;
+  if (recorded === contract) return;
+
+  if (recorded !== null) {
+    logger.warn({ from: recorded, to: contract }, "contract changed; rebuilding projection");
+  }
+
+  // Child rows cascade from promises.
+  await db.delete(promises);
+  await db.delete(projects);
+
+  await db
+    .insert(indexerState)
+    .values({ key: SOURCE_KEY, value: contract })
+    .onConflictDoUpdate({ target: indexerState.key, set: { value: contract } });
+}
+
+/**
+ * Drop promises the chain no longer reports.
+ *
+ * The contract is append-only, so this should normally remove nothing. It exists because a
+ * projection that can only grow is not a projection: a wrong address, a reset localnet, or a
+ * reorg would leave records the product attributes to a contract that does not contain them.
+ */
+async function pruneVanished(
+  db: Database,
+  ids: Array<string | number>,
+  logger: IndexerLogger
+): Promise<number> {
+  const onChain = ids.map((id) => String(id));
+  const rows = await db.select({ id: promises.promiseId }).from(promises);
+  const stale = rows.map((r) => r.id).filter((id) => !onChain.includes(id));
+  if (stale.length === 0) return 0;
+
+  for (const id of stale) {
+    await db.delete(promises).where(eq(promises.promiseId, id));
+  }
+  return stale.length;
+}
+
+/**
  * One full synchronization pass.
  *
  * Always reconciles the entire promise list: it is the only way a restart is guaranteed
@@ -260,6 +329,10 @@ export async function syncOnce(
   logger: IndexerLogger
 ): Promise<SyncResult> {
   const started = Date.now();
+  const contract = reader.contractAddress.toLowerCase();
+
+  await alignProjectionToContract(db, contract, logger);
+
   const ids = await reader.getAllPromiseIds();
 
   let indexed = 0;
@@ -277,6 +350,9 @@ export async function syncOnce(
       );
     }
   }
+
+  const removed = await pruneVanished(db, ids, logger);
+  if (removed > 0) logger.warn({ removed }, "pruned records no longer present on chain");
 
   const projectCount = await rebuildProjects(db);
 

@@ -164,7 +164,10 @@ def _check_url(url: str, field: str) -> str:
     if not host:
         _err("%s has no host" % field)
 
-    host = host.lower()
+    host = _normalize_host(host)
+
+    if not host:
+        _err("%s has no host" % field)
 
     if port_part:
         if not port_part.isdigit():
@@ -193,21 +196,67 @@ def _check_url(url: str, field: str) -> str:
     return url
 
 
+def _normalize_host(host: str) -> str:
+    """
+    Normalise a host for screening.
+
+    A trailing dot denotes the DNS root and resolves identically — `localhost.` is loopback —
+    so it must be stripped before any name comparison, or the blocked-name list is trivially
+    bypassed by appending one character.
+    """
+    h = host.lower()
+    while h.endswith("."):
+        h = h[:-1]
+    return h
+
+
 def _is_ip_literal(host: str) -> bool:
     """
-    True when host is an IPv4 or IPv6 literal rather than a DNS name.
+    True when `host` is any spelling of an IPv4 or IPv6 address rather than a DNS name.
 
-    An octet with a leading zero (010.0.0.1) still counts as a literal — it is in fact
-    *more* suspicious than a plain literal, because it can be read as octal by some
-    resolvers and would otherwise slip past this screen.
+    A four-dotted-quad check is not sufficient, and the gap is not theoretical: every form
+    below resolves to loopback in a browser or resolver, so admitting any of them defeats the
+    screen entirely.
+
+        127.0.0.1        the plain quad
+        010.0.0.1        leading zero — some resolvers read the octet as octal
+        2130706433       decimal 2130706433, i.e. 127.0.0.1
+        0x7f000001       the same address in hex
+        127.1            short form; resolvers pad the missing octets with zero
+        127.0.1          three-part short form
+
+    So the rule is inverted: a host counts as an address unless it demonstrably is not one.
+    Anything composed only of digits, dots and an optional `0x` prefix is treated as an
+    address, which errs toward rejection — a false positive costs a legitimate numeric
+    hostname, a false negative lets a request reach loopback.
     """
     if ":" in host:
         return True  # IPv6 literal
-    octets = host.split(".")
-    if len(octets) != 4:
+    if not host:
         return False
-    for octet in octets:
-        if not octet.isdigit() or not (0 <= int(octet) <= 255):
+
+    # Hex form, whole host (0x7f000001) or per octet (0x7f.0.0.1). A "0x" anywhere in the
+    # host means it is written as a number, which is the question this function answers.
+    if "0x" in host:
+        return True
+
+    # Only digits and dots may appear, or it is plainly a name.
+    if not all(c.isdigit() or c == "." for c in host):
+        return False
+
+    parts = host.split(".")
+    if len(parts) == 0 or len(parts) > 4:
+        return False
+
+    # A single part is the 32-bit form: 2130706433 is 127.0.0.1, so it runs to ten digits
+    # rather than three, and is bounded by 2^32-1 rather than 255.
+    if len(parts) == 1:
+        return parts[0].isdigit() and len(parts[0]) <= 10 and int(parts[0]) <= 4294967295
+
+    # Two to four parts are a dotted quad in some short form. Reject empty parts
+    # ("1..2.3") and anything over 255.
+    for part in parts:
+        if not part.isdigit() or len(part) > 3 or int(part) > 255:
             return False
     return True
 

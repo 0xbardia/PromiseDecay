@@ -38,6 +38,17 @@ describe("checkSourceUrl", () => {
     ["http://169.254.169.254/latest", "ip-literal"],
     ["http://010.0.0.1/x", "ip-literal"],
     ["http://[::1]/x", "ip-literal"],
+    // Non-canonical spellings that still resolve to loopback. Each of these was accepted
+    // before the screen was inverted — see PD-SEC-017.
+    ["http://2130706433/x", "ip-literal"],
+    ["http://0x7f000001/x", "ip-literal"],
+    ["http://0x7f.0.0.1/x", "ip-literal"],
+    ["http://127.1/x", "ip-literal"],
+    ["http://127.0.0.1/x", "ip-literal"],
+    ["http://2130706433:8080/x", "ip-literal"],
+    ["http://localhost./x", "localhost"],
+    ["http://foo.localhost./x", "localhost"],
+    ["http://LOCALHOST./x", "localhost"],
     ["https://example.com:22/", "unusual-port"],
     // 99999 is numeric, so it fails the range check rather than the format check.
     ["https://example.com:99999/", "port-range"],

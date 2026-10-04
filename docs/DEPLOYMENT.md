@@ -8,7 +8,7 @@
 | Network | GenLayer Studionet |
 | Chain ID | `61999` |
 | RPC | `https://studio.genlayer.com/api` |
-| Contract | `0x74f3E1E6c90b4Ff156FC01D564eB7DbBc865cC93` |
+| Contract | `0x5F1C5C97ec9040FC76394419De3159C401bBDc05` |
 | Explorer | `https://explorer-studio.genlayer.com` |
 
 The contract address is the one this documentation is written against. If the contract is

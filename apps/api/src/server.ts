@@ -100,7 +100,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     timeWindow: env.RATE_LIMIT_WINDOW_MS,
     // Rate limit per IP; the API is public and read-only.
     keyGenerator: (req) => req.ip,
+    // Return the full response object, including `statusCode`.
+    //
+    // Returning only the body made Fastify fall back to 500, so a throttled client was told
+    // the server had broken. That is actively harmful: it pollutes 5xx dashboards and hides
+    // the fact that the request was merely refused. The correct answer to "too many requests"
+    // is 429, and the structured error shape is preserved so clients parse it like any other.
     errorResponseBuilder: (_req, ctx) => ({
+      statusCode: 429,
       error: {
         code: ErrorCode.RATE_LIMITED,
         message: `Too many requests. Try again in ${Math.ceil(ctx.ttl / 1000)}s.`,
@@ -108,8 +115,32 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     }),
   });
 
-  app.setErrorHandler((error: Error & { statusCode?: number }, req, reply) => {
+  app.setErrorHandler(
+    // `ttl` is set by @fastify/rate-limit on the rejection it raises, and is absent on every
+    // other error — which is why the rate-limit branch below has to guard it.
+    (error: Error & { statusCode?: number; code?: string; ttl?: number }, req, reply) => {
     const requestId = req.id;
+
+    // A rate-limit rejection arrives here as a typed error with statusCode 429 and no
+    // message of its own. Left to the generic branch below it was labelled VALIDATION_FAILED
+    // with no message at all, so a client that had simply been throttled was told its request
+    // was malformed. Recognise it explicitly and describe it accurately.
+    if (error.code === "FST_ERR_RATE_LIMIT" || error.statusCode === 429) {
+      // Quote the same number the plugin put in `Retry-After`, so the message and the header
+      // never disagree — a client that obeys the message and one that obeys the header must
+      // not be told different things. Falls back to the configured window if absent.
+      const header = Number(reply.getHeader("retry-after"));
+      const ttlMs =
+        Number.isFinite(header) && header > 0 ? header * 1000 : env.RATE_LIMIT_WINDOW_MS;
+      return reply.status(429).send({
+        error: {
+          code: ErrorCode.RATE_LIMITED,
+          message: `Too many requests. Try again in ${Math.ceil(ttlMs / 1000)}s.`,
+          requestId,
+        },
+      });
+    }
+
     if (error instanceof ApiError) {
       return reply.status(error.statusCode).send({
         error: { code: error.code, message: error.message, details: error.details, requestId },

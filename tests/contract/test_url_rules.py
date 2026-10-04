@@ -37,6 +37,20 @@ REJECTED = [
     ("http://192.168.001.1/x", "ip-literal"),
     ("http://[::1]/x", "ip-literal"),
     ("http://[fe80::1]/x", "ip-literal"),
+    # Non-canonical spellings of the same addresses. Each of these resolves to loopback (or
+    # to a private range) in a browser or a resolver, so a screen that admits any of them
+    # provides no protection at all. They were all accepted before this was fixed.
+    ("http://2130706433/x", "ip-literal"),       # decimal 2130706433 = 127.0.0.1
+    ("http://0x7f000001/x", "ip-literal"),       # hex 0x7f000001 = 127.0.0.1
+    ("http://127.1/x", "ip-literal"),            # short form; padded to 127.0.0.1
+    ("http://127.0.1/x", "ip-literal"),          # three-part short form
+    ("http://0x7f.0.0.1/x", "ip-literal"),       # hex octets
+    ("http://2130706433:8080/x", "ip-literal"),  # decimal, with a port
+    # A trailing dot is the DNS root: it resolves identically, so it must not defeat a
+    # name-based block list either.
+    ("http://localhost./x", "localhost"),
+    ("http://foo.localhost./x", "localhost"),
+    ("http://LOCALHOST./x", "localhost"),
     ("https://example.com:22/", "unusual-port"),
     ("https://example.com:21/", "unusual-port"),
     ("https://example.com:99999/", "range"),

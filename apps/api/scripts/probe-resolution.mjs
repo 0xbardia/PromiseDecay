@@ -4,7 +4,7 @@
  */
 import { createClient, chains } from "genlayer-js";
 
-const ADDRESS = process.argv[2] ?? "0x74f3E1E6c90b4Ff156FC01D564eB7DbBc865cC93";
+const ADDRESS = process.argv[2] ?? "0x5F1C5C97ec9040FC76394419De3159C401bBDc05";
 const c = createClient({ chain: chains.studionet });
 const read = (m, a = []) => c.readContract({ address: ADDRESS, functionName: m, args: a });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

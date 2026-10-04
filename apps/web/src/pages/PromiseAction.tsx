@@ -160,9 +160,34 @@ export function PromiseAction({
 
   const [promise, setPromise] = useState<ApiPromiseDetail | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
-  const [touched, setTouched] = useState(false);
+  // Per-field interaction, not a single form-level flag.
+  //
+  // Errors used to appear only after the form was submitted — but the submit button is
+  // disabled while the form is invalid, so it could never fire, and the user was left staring
+  // at "Fix the highlighted fields" with nothing highlighted. Tracking which fields they have
+  // actually engaged with makes the message true.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitted, setSubmitted] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
+
+  // A select's first option is the default the user sees, so it must also be the value in
+  // state. Previously the <select> displayed "SOURCE" while `values.kind` stayed empty, which
+  // made a required field permanently invalid and the form impossible to submit.
+  useEffect(() => {
+    if (!config) return;
+    setValues((prev) => {
+      const seeded: Record<string, string> = {};
+      let changed = false;
+      for (const field of config.fields) {
+        if (field.kind !== "select") continue;
+        if (prev[field.key]) continue;
+        seeded[field.key] = field.options?.[0] ?? "";
+        changed = true;
+      }
+      return changed ? { ...prev, ...seeded } : prev;
+    });
+  }, [config]);
 
   const load = useCallback(() => {
     if (!/^\d+$/.test(id)) return;
@@ -342,14 +367,15 @@ export function PromiseAction({
           style={{ gap: 18, marginTop: 22 }}
           onSubmit={(e) => {
             e.preventDefault();
-            setTouched(true);
+            setSubmitted(true);
           }}
         >
           <GlassSurface tone="heavy" className="pd-glass__pad">
             <div className="pd-stack" style={{ gap: 20 }}>
               {config.fields.map((field) => {
                 const value = values[field.key] ?? "";
-                const error = touched ? errors[field.key] : undefined;
+                const error =
+                  submitted || touched[field.key] ? errors[field.key] : undefined;
                 const idAttr = `field-${field.key}`;
                 return (
                   <div className="pd-field" key={field.key}>
@@ -360,10 +386,11 @@ export function PromiseAction({
                       <select
                         id={idAttr}
                         className="pd-select"
-                        value={value || field.options?.[0] || ""}
+                        value={value}
                         onChange={(e) =>
                           setValues((v) => ({ ...v, [field.key]: e.target.value }))
                         }
+                        onBlur={() => setTouched((t) => ({ ...t, [field.key]: true }))}
                         aria-invalid={Boolean(error)}
                       >
                         {field.options?.map((o) => (
@@ -378,6 +405,7 @@ export function PromiseAction({
                         className="pd-textarea"
                         value={value}
                         onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                        onBlur={() => setTouched((t) => ({ ...t, [field.key]: true }))}
                         aria-invalid={Boolean(error)}
                         aria-describedby={`${idAttr}-hint`}
                         rows={field.key === "quote" || field.key === "statement" ? 4 : 3}
@@ -390,6 +418,7 @@ export function PromiseAction({
                         type={field.kind === "url" ? "url" : "text"}
                         value={value}
                         onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                        onBlur={() => setTouched((t) => ({ ...t, [field.key]: true }))}
                         aria-invalid={Boolean(error)}
                         aria-describedby={`${idAttr}-hint`}
                         data-testid={`field-${field.key}`}
@@ -466,7 +495,8 @@ export function PromiseAction({
             buildArgs={buildArgs}
             onDone={() => {
               setValues({});
-              setTouched(false);
+              setTouched({});
+              setSubmitted(false);
               load();
             }}
           />

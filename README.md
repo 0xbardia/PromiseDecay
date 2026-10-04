@@ -114,10 +114,10 @@ Deployed on **GenLayer Studionet (chain 61999)**:
 
 | | |
 |---|---|
-| **Contract** | `0x74f3E1E6c90b4Ff156FC01D564eB7DbBc865cC93` |
-| **Deployment tx** | `0xc3024a37cceffde1c9bc9f4bf857c079f7531392557b4ce1c9a048221646de8e` |
+| **Contract** | `0x5F1C5C97ec9040FC76394419De3159C401bBDc05` |
+| **Deployment tx** | `0x608ff1aa1e6b95ef3af257ee40db16ced3fdd967ad44ad4c15c5be28fdbe55eb` |
 | **Runtime pin** | `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6` |
-| **Source sha256** | `ff6615398fb9d5abcd6647272b8870c3d6769054f0067960bb4165fb87285c67` |
+| **Source sha256** | `6c55140b299c7dab83676d4e0f4a41ad85326db873d7e30ad39f6a7552febb42` |
 
 Why Python and GenLayer at all: deciding whether a public article supports the claim that a
 mainnet launched is a question no amount of deterministic code can answer. It needs
