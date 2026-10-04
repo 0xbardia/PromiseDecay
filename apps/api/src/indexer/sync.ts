@@ -314,6 +314,10 @@ async function pruneVanished(
   for (const id of stale) {
     await db.delete(promises).where(eq(promises.promiseId, id));
   }
+
+  // Say what was removed. A projection that silently shrinks looks identical to a sync that
+  // simply did not run, and the operator has no way to tell the two apart from the outside.
+  logger.warn({ removed: stale.length, ids: stale }, "pruned promises no longer on chain");
   return stale.length;
 }
 

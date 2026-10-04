@@ -103,17 +103,46 @@ const schema = z.object({
 export type Env = z.infer<typeof schema>;
 
 /**
+ * Deployment identity: the keys that change together when the contract is redeployed.
+ *
+ * These behave differently from ordinary configuration. A PM2 daemon inherits the environment
+ * that existed when *it* started, and hands that snapshot to every process it later spawns —
+ * so after a redeploy the running indexer keeps reporting the previous contract address, and
+ * because a real environment variable outranks `.env` here, editing `.env` has no effect at
+ * all. The symptom is a service that is healthy, online, and quietly reading the wrong chain.
+ *
+ * These values are deployment facts recorded in one file rather than per-host overrides, so
+ * the file is authoritative for them. Everything else keeps env-wins, because a container or
+ * PM2 override genuinely should not be clobbered by a file on disk.
+ */
+const DEPLOYMENT_KEYS = [
+  "GENLAYER_NETWORK",
+  "GENLAYER_CHAIN_ID",
+  "GENLAYER_RPC_URL",
+  "GENLAYER_CONTRACT_ADDRESS",
+] as const;
+
+/**
  * Parse and validate configuration.
  *
- * Real environment variables always win over `.env`, so a container/PM2 override is
- * never silently clobbered by a file on disk.
+ * Real environment variables win over `.env` for ordinary settings, so a container or PM2
+ * override is never silently clobbered by a file on disk. The deployment identity keys are the
+ * documented exception — see {@link DEPLOYMENT_KEYS}.
  *
  * @throws {Error} naming every missing/invalid key, so the operator can fix them all at
  * once instead of one restart at a time.
  */
 export function loadEnv(source?: NodeJS.ProcessEnv): Env {
-  const merged: NodeJS.ProcessEnv = { ...readDotEnv(), ...process.env };
+  const fileEnv = readDotEnv();
+  const merged: NodeJS.ProcessEnv = { ...fileEnv, ...process.env };
   if (source) Object.assign(merged, source);
+
+  // The file wins for deployment identity, and only for it.
+  for (const key of DEPLOYMENT_KEYS) {
+    const fromFile = fileEnv[key];
+    if (fromFile !== undefined) merged[key] = fromFile;
+  }
+
   const candidate: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(merged)) {
     if (v !== undefined) candidate[k] = v;
