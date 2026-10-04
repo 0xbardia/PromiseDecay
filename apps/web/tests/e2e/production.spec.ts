@@ -309,11 +309,21 @@ test.describe("accessibility", () => {
 
   test("every image and control has an accessible name", async ({ page }) => {
     await page.goto("/explore");
+
+    // Wait for the card list to settle before scanning. The list is populated from the API, so
+    // waiting for only the first card left a window in which later cards had not rendered and
+    // their controls were absent from the scan — the source of the intermittent failure.
     await expect(page.getByTestId("promise-card").first()).toBeVisible({ timeout: 25_000 });
+    await page.waitForLoadState("networkidle");
+    await expect
+      .poll(async () => page.getByTestId("promise-card").count(), { timeout: 15_000 })
+      .toBeGreaterThan(0);
 
     const unlabelled = await page.evaluate(() => {
       const problems: string[] = [];
-      for (const el of Array.from(document.querySelectorAll("button, a, input, select, textarea"))) {
+      for (const el of Array.from(
+        document.querySelectorAll("button, a, input, select, textarea, img")
+      )) {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) continue;
         const name =
@@ -321,22 +331,83 @@ test.describe("accessibility", () => {
           el.getAttribute("title") ||
           (el.textContent || "").trim() ||
           (el as HTMLInputElement).placeholder ||
-          (el.labels?.[0]?.textContent ?? "");
+          (el.labels?.[0]?.textContent ?? "") ||
+          // An image is named by its alt text, which none of the above surface.
+          (el as HTMLImageElement).alt ||
+          "";
         if (!name) problems.push(`${el.tagName}: ${(el.className || "").toString().slice(0, 40)}`);
       }
       return problems;
     });
     expect(unlabelled).toEqual([]);
+
+    // Prove the scan can actually fail. Without this, a selector or evaluate bug that made it
+    // inspect nothing would report success — the test would pass while checking zero elements.
+    const scanned = await page.evaluate(
+      () => document.querySelectorAll("button, a, input, select, textarea, img").length
+    );
+    expect(scanned, "the accessible-name scan inspected nothing").toBeGreaterThan(10);
   });
 
   test("reduced motion is honoured", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await expect(page.getByTestId("promise-lens")).toBeVisible();
-    // The lens must still be fully usable, just not animated.
+
+    // Assert the property the test is named for, rather than inferring it from behaviour.
+    //
+    // The previous version clicked the lens and asserted that `data-frame` changed. That
+    // proved the lens advanced — it said nothing about whether motion was disabled, and it
+    // depended on a click landing within the assertion window, so it went flaky under the
+    // parallel three-browser run. Computed style is deterministic.
+    //
+    // The reset is 0.001ms rather than 0s on purpose (a well-known accessibility
+    // workaround): browsers ignore `animationend`/`transitionend` for zero-duration
+    // animations, which would break any listener waiting to clean up.
+    const motion = await page.evaluate(() => {
+      const nodes = Array.from(document.querySelectorAll("*")).slice(0, 400);
+      const offenders: string[] = [];
+      for (const el of nodes) {
+        const cs = getComputedStyle(el);
+        const ms = (v: string) => (v.endsWith("ms") ? parseFloat(v) : parseFloat(v) * 1000);
+        const anim = cs.animationName === "none" ? 0 : ms(cs.animationDuration);
+        const trans = ms(cs.transitionDuration);
+        if (anim > 1 || trans > 1) {
+          offenders.push(
+            `${el.tagName}.${el.className}: anim=${cs.animationName}/${cs.animationDuration} trans=${cs.transitionDuration}`
+          );
+        }
+      }
+      return {
+        offenders: offenders.slice(0, 5),
+        scroll: getComputedStyle(document.documentElement).scrollBehavior,
+      };
+    });
+
+    expect(motion.offenders, `still animating under reduced motion: ${motion.offenders.join(" | ")}`).toEqual([]);
+    // Smooth scrolling is itself motion, and is what the earlier click-eating bug came from.
+    expect(motion.scroll).not.toBe("smooth");
+
+    // And the feature must remain fully usable — reduced motion disables movement, not function.
     const before = await page.getByTestId("promise-lens").getAttribute("data-frame");
     await page.getByTestId("lens-next").click();
-    await expect(page.getByTestId("promise-lens")).not.toHaveAttribute("data-frame", before ?? "");
+    await expect(page.getByTestId("promise-lens")).not.toHaveAttribute("data-frame", before ?? "", {
+      timeout: 15_000,
+    });
+  });
+
+  test("motion is enabled when the user has not asked for reduced motion", async ({ page }) => {
+    // The complement of the test above, so the reduced-motion path cannot pass by disabling
+    // motion unconditionally. Without this, the product could satisfy the accessibility
+    // requirement simply by never animating anything.
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/");
+    await expect(page.getByTestId("promise-lens")).toBeVisible();
+
+    const scroll = await page.evaluate(
+      () => getComputedStyle(document.documentElement).scrollBehavior
+    );
+    expect(scroll, "smooth scrolling should be restored when motion is allowed").toBe("smooth");
   });
 
   test("status is never conveyed by colour alone", async ({ page }) => {
