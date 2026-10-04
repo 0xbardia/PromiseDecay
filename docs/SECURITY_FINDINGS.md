@@ -29,13 +29,14 @@ What that means in practice:
 | Severity | Open | Fixed |
 |---|---|---|
 | Critical | 0 | 3 |
-| High | 0 | 6 |
+| High | 0 | 7 |
 | Medium | 0 | 5 |
 | Low | 0 | 3 |
 | Informational | 1 | 0 |
 
-Findings PD-SEC-015 and PD-SEC-016 were added after the production deployment and browser-matrix
-pass, when verifying the running system surfaced defects that static review had not.
+Findings PD-SEC-014a, PD-SEC-015 and PD-SEC-016 were added after the production deployment and
+browser-matrix pass, when verifying the running system surfaced defects that static review had not.
+`pnpm audit --prod` is now clean.
 
 **Gate for v1.0.0:** 0 open Critical, 0 open High. Met.
 
@@ -449,6 +450,35 @@ converges on the next run.
 **Residual risk.** Under sustained contention the indexer can still fall behind. This is
 visible through `indexed_at` and is the correct trade-off versus hammering a shared public
 node.
+
+---
+
+### PD-SEC-014a — SQL injection in Drizzle ORM identifier escaping
+
+| | |
+|---|---|
+| **Severity** | High |
+| **Component** | `drizzle-orm` (dependency) |
+| **Status** | **Fixed** |
+
+**Description.** `pnpm audit --prod` on the release candidate reported
+[GHSA-gpj5-g38j-94v9](https://github.com/advisories/GHSA-gpj5-g38j-94v9): SQL injection through
+improperly escaped SQL **identifiers** in `drizzle-orm` below 0.45.2. The project was pinned to
+`^0.38.3`.
+
+**Impact.** Identifier interpolation is not used for user-supplied values in this codebase — all
+user input reaches the database as a parameterised value, and table/column names are compile-time
+schema constants. Exploitability was therefore low in practice. It was still a High advisory in a
+shipped dependency with a published fix, and "we probably don't hit it" is not a mitigation.
+
+**Fix.** Upgraded `drizzle-orm` to `^0.45.3` in `apps/api` and `apps/indexer`.
+
+**Verification.** `pnpm audit --prod` reports **no known vulnerabilities**. The upgrade is covered
+by the existing gate: `pnpm -r typecheck` clean, and the 33 backend tests — which exercise the
+repository layer against a real PostgreSQL instance — pass unchanged.
+
+**Residual risk.** None identified. Worth re-running `pnpm audit` on every release: this advisory
+was present from the first `pnpm install` and only surfaced when the audit was run explicitly.
 
 ---
 

@@ -15,7 +15,7 @@
     "@promisedecay/api": "workspace:*",
     "@promisedecay/config": "workspace:*",
     "@promisedecay/domain": "workspace:*",
-    "drizzle-orm": "^0.38.3",
+    "drizzle-orm": "^0.45.3",
     "genlayer-js": "^1.1.8",
     "postgres": "^3.4.5"
   },

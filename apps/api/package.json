@@ -19,7 +19,7 @@
     "@promisedecay/config": "workspace:*",
     "@promisedecay/domain": "workspace:*",
     "@sinclair/typebox": "^0.34.0",
-    "drizzle-orm": "^0.38.3",
+    "drizzle-orm": "^0.45.3",
     "fastify": "^5.2.0",
     "genlayer-js": "^1.1.8",
     "pino": "^9.5.0",
