@@ -744,6 +744,62 @@ of rotation during a quota window it does not control.
 
 ---
 
+### PD-SEC-028 — One address could deny any promise a final state
+
+| | |
+|---|---|
+| **Severity** | **High** (integrity — a record could never be closed) |
+| **Component** | `contracts/PromiseDecay.py` |
+| **Status** | **Fixed** (redeployment pending the Studio daily quota) |
+
+**Description.** `re_evaluate` opens a fresh challenge window from each new decision. That is
+correct on its own terms — a challenge deserves its own time to be answered. But nothing bounded
+the number of rounds, and `re_evaluate` only required that *one* challenge existed on record.
+
+So a single challenge was enough to call it repeatedly. Each call pushed
+`challenge_closes_at = now + WINDOW` further out, and `finalize` requires `now >=
+challenge_closes_at`. The precondition could never be satisfied, so the record stayed provisional
+indefinitely. One address could deny any promise its final state — the one thing the product
+exists to provide.
+
+**Proven before fixing.** A Direct Mode test with one challenge recorded called `re_evaluate`
+eight consecutive times; all eight succeeded, so it would have accepted unlimited rounds.
+
+**Resolution.** `MAX_CHALLENGE_ROUNDS = 3`. Three is generous: the original decision, one
+re-evaluation, and one more after a second challenge. Past that the window stops being
+extendable so the record can close. `challenge` is bounded by the same counter — otherwise it
+would still flip the lifecycle to `RESOLVING` after the rounds were spent, leaving a record that
+looks disputed but is already finalizable.
+
+Four tests in `tests/contract/test_challenge_rounds.py`: the exploit no longer works, a record
+still reaches `FINAL` after the cap is spent, a re-evaluated result still gets its own window,
+and the ordinary challenge path is unaffected.
+
+---
+
+### PD-SEC-029 — Search looked functional and was not
+
+| | |
+|---|---|
+| **Severity** | Medium (availability of a core feature) |
+| **Component** | `apps/web/src/pages/Explore.tsx` |
+| **Status** | **Fixed** |
+
+**Description.** The explore search box applied a query only on form submit, and the form has no
+visible submit control. Typing did nothing: `acme`, `mainnet` and a nonsense string all returned
+the same four cards. Search was implemented and reachable, but only for a user who happened to
+press Enter, and nothing on the page indicated that.
+
+An existing test passed because it pressed Enter — it verified the mechanism rather than the
+experience.
+
+**Resolution.** Queries are debounced 300ms and applied as the user types; Enter still applies
+immediately. A live status line reports the result count (`3 results for "acme"`, `No promises
+match "xyzzy"`) and is announced through `aria-live`, so the search is legible to a screen
+reader and visibly responsive to everyone. Two regression tests across all three engines.
+
+---
+
 ### PD-SEC-020 — Write flows were unreachable, and validation unreachable behind a disabled button
 
 | | |
