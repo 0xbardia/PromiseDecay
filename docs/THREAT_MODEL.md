@@ -163,6 +163,30 @@ a real pause; lifecycle and deploy tooling retry using the server's `retry_after
 **Residual:** under sustained contention the indexer can fall behind. Visible via
 `indexed_at`.
 
+### T12 — Unbounded growth in the number of promises
+
+Every per-promise collection is bounded — `MAX_EVIDENCE`, `MAX_DRIFT`, `MAX_RESPONSES`,
+`MAX_CHALLENGES`, and `MAX_CHALLENGE_ROUNDS` so a dispute cannot be extended forever. The
+*number of promises* is deliberately not bounded, and that is a decision rather than an
+oversight.
+
+**Why.** This is a permissionless public record. Anyone may record a promise, and the reason a
+promise is interesting is that the person who made it is not the person who benefits from it
+being tracked. A global cap would make the first N records permanently privileged: after the cap
+was reached, which promises exist would depend on a race, and the omissions would be invisible.
+
+**Controls.** Growth is paid for, not free: `create_promise` is a metered transaction, so state
+growth is bought. The read paths are independent of the write rate — the API serves from
+PostgreSQL and never calls the chain for a read — so a flood of new promises cannot degrade the
+product for a reader. The indexer's own request budget scales with the promise count rather than
+assuming a fixed dataset size.
+
+**Residual.** A determined actor who can afford many transactions can still grow state
+indefinitely, and the indexer's sync time grows with the dataset (see `apps/indexer/src/pacing.ts`
+— the arithmetic is bounded only while a single pass fits inside the daily request budget).
+Mitigating that properly needs incremental reads, which is recorded there as the remaining
+architectural limit rather than hidden behind the current numbers.
+
 ## 5. What is deliberately out of scope
 
 - Compromising a majority of GenLayer validators.
