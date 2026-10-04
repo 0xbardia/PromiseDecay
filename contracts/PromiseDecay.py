@@ -40,6 +40,18 @@ MAX_EVIDENCE = 64
 MAX_DRIFT = 64
 MAX_RESPONSES = 32
 MAX_CHALLENGES = 16
+
+# How many times the challenge window may be extended by re-evaluation.
+#
+# `re_evaluate` opens a fresh window from each new decision, which is correct: a challenge
+# deserves its own time to be answered. But without a cap, a single challenge on record was
+# enough to keep calling it forever — each call pushing `challenge_closes_at` further out — so
+# `finalize` could never become eligible and the record stayed provisional indefinitely.
+#
+# Three rounds is generous for a dispute: the original decision, one re-evaluation, and one
+# more after the second challenge. Past that the window stops being extendable so the record
+# can actually close, which is the whole point of having a final state.
+MAX_CHALLENGE_ROUNDS = 3
 MAX_FETCH_SOURCES = 3
 MAX_EXTRACT_CHARS = 4000
 MAX_PROMPT_CHARS = 16000
@@ -609,6 +621,9 @@ class PromiseDecay(gl.Contract):
     final_result: TreeMap[u256, ResolutionResult]
     lifecycle: TreeMap[u256, str]
     challenge_closes_at: TreeMap[u256, u256]
+    # Re-evaluation rounds consumed. Bounded so the challenge window cannot be extended
+    # forever; see MAX_CHALLENGE_ROUNDS.
+    challenge_rounds: TreeMap[u256, u256]
     # TreeMap.keys() is not calldata-encodable on chain, so the id list is stored
     # explicitly and returned as a real DynArray[u256].
     promise_ids: DynArray[u256]
@@ -641,6 +656,12 @@ class PromiseDecay(gl.Contract):
     def _child(self, bucket, promise_id: u256):
         """Return the child collection for a promise, creating it on first use."""
         return bucket.get_or_insert_default(promise_id)
+
+    def _rounds_used(self, promise_id: u256) -> u256:
+        """Re-evaluation rounds consumed for this promise, zero if none yet."""
+        if promise_id in self.challenge_rounds:
+            return self.challenge_rounds[promise_id]
+        return u256(0)
 
     def _is_final(self, promise_id: u256) -> bool:
         return promise_id in self.final_result
@@ -893,6 +914,12 @@ class PromiseDecay(gl.Contract):
         if now >= closes:
             _err("Challenge window has closed")
 
+        # Refused once the rounds are spent. Otherwise a challenge would still flip the
+        # lifecycle to RESOLVING after the window stopped being extendable, leaving a record
+        # that looks disputed but is quietly already finalizable.
+        if self._rounds_used(promise_id) >= MAX_CHALLENGE_ROUNDS:
+            _err("Challenge rounds exhausted for this promise")
+
         reason = _clean(reason, MAX_QUOTE, "reason", minimum=12)
         evidence_url = _check_url(evidence_url, "evidence_url")
 
@@ -948,6 +975,15 @@ class PromiseDecay(gl.Contract):
         if len(self._child(self.challenges, promise_id)) == 0:
             _err("No challenge recorded; nothing to re-evaluate")
 
+        # The bound that makes a record closable. Without it, one challenge is enough to keep
+        # extending the window indefinitely and finalize never becomes reachable.
+        used = self._rounds_used(promise_id)
+        if used >= MAX_CHALLENGE_ROUNDS:
+            _err(
+                "Challenge rounds exhausted for this promise; "
+                "the window can no longer be extended and the record can be finalized"
+            )
+
         dna = self.promises[promise_id]
 
         source_list = _admissible_sources(self._child(self.evidence, promise_id))
@@ -995,7 +1031,8 @@ class PromiseDecay(gl.Contract):
             explanation=result["explanation"],
             decided_ts=now,
         )
-        # A fresh window starts from the new decision.
+        # A fresh window starts from the new decision, bounded by MAX_CHALLENGE_ROUNDS.
+        self.challenge_rounds[promise_id] = used + 1
         self.challenge_closes_at[promise_id] = now + CHALLENGE_WINDOW_SECONDS
         self.lifecycle[promise_id] = L_CHALLENGE_WINDOW
 
@@ -1048,6 +1085,7 @@ class PromiseDecay(gl.Contract):
             "max_drift": MAX_DRIFT,
             "max_responses": MAX_RESPONSES,
             "max_challenges": MAX_CHALLENGES,
+            "max_challenge_rounds": MAX_CHALLENGE_ROUNDS,
             "challenge_window_seconds": CHALLENGE_WINDOW_SECONDS,
             "delivery_values": DELIVERY_VALUES,
             "integrity_values": INTEGRITY_VALUES,
