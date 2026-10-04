@@ -717,6 +717,33 @@ the failure was reported as a missing dependency rather than a missing config.
 
 ---
 
+### PD-SEC-027 — Readiness probe consumed chain quota outside the rate limiter
+
+| | |
+|---|---|
+| **Severity** | Medium (availability of a shared dependency) |
+| **Component** | `apps/api/src/chain/reader.ts` |
+| **Status** | **Fixed** |
+
+**Description.** `GenlayerReader.ping()` — the call behind `/health/ready` — issued a bare
+`fetch`, bypassing the `RateLimiter` that meters every other chain access. Any monitor, load
+balancer or cron polling readiness was therefore spending the shared daily budget invisibly, and
+a health check was the least appropriate place to draw on it. Compounding this, the verdict was
+recomputed on every call, so a one-second poll loop meant one unmetered request per second.
+
+**Resolution.** The probe now acquires a slot from the same limiter as every other read, and the
+verdict is cached for 30 seconds. Six tests in `apps/api/tests/reader-ping.test.ts` pin the
+behaviour, including that three readiness checks cost exactly one request and that the cache
+expires.
+
+The existing rule that a JSON-RPC error still counts as "alive" is preserved and now tested:
+a rate-limit refusal proves the node is up, and reporting otherwise would pull a healthy API out
+of rotation during a quota window it does not control.
+
+---
+
+---
+
 ### PD-SEC-020 — Write flows were unreachable, and validation unreachable behind a disabled button
 
 | | |

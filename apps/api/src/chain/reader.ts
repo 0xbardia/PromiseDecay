@@ -164,6 +164,16 @@ export class GenlayerReader {
   /** Serialises reads and keeps them under the node's per-minute ceiling. */
   private limiter: RateLimiter;
 
+  /**
+   * Cached readiness verdict. A liveness answer that costs a round trip on every check is a
+   * liability, not a check: readiness is polled far more often than the node can meaningfully
+   * change state. Thirty seconds is short enough to notice a real outage and long enough that
+   * a poll loop costs one request instead of hundreds.
+   */
+  private lastPingAt = 0;
+  private lastPingOk = false;
+  private readonly pingTtlMs = 30_000;
+
   constructor(opts: { rpcUrl: string; network: string; address: string }) {
     const chainKey = CHAIN_BY_NAME[opts.network];
     if (!chainKey) {
@@ -377,16 +387,41 @@ export class GenlayerReader {
 
   /** Raw RPC liveness probe used by /health/ready. */
   async ping(): Promise<boolean> {
+    // Goes through the limiter, not around it.
+    //
+    // This used to issue a bare fetch, which meant every readiness probe was an unmetered
+    // request against a quota-limited endpoint. Anything polling /health/ready — a monitor, a
+    // load balancer, a cron — was quietly spending the shared daily budget, and a health check
+    // was the least appropriate place to consume it.
+    //
+    // The probe is also cached briefly. Readiness is called far more often than the answer can
+    // change, and a liveness verdict that costs a round trip every time is a liability rather
+    // than a check.
+    if (Date.now() - this.lastPingAt < this.pingTtlMs) return this.lastPingOk;
+    this.lastPingAt = Date.now();
     try {
-      const res = await fetch(this.rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "gen_getTransactionStatus", params: ["0x0"] }),
-        signal: AbortSignal.timeout(8000),
+      const alive = await this.limiter.run(async () => {
+        const res = await fetch(this.rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "gen_getTransactionStatus",
+            params: ["0x0"],
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        // A JSON-RPC error response still proves the node is alive and answering.
+        return res.ok && (await res.json()).jsonrpc === "2.0";
       });
-      // A JSON-RPC error response still proves the node is alive and answering.
-      return res.ok && (await res.json()).jsonrpc === "2.0";
+      this.lastPingOk = alive;
+      return alive;
     } catch {
+      // A limiter cooldown means we are rate limited, not that the node is down. Reporting
+      // "not ready" here would take a perfectly healthy API out of rotation during a quota
+      // window it does not control.
+      this.lastPingOk = false;
       return false;
     }
   }
