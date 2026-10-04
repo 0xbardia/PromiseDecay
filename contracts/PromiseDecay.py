@@ -378,10 +378,27 @@ def _parse_decision(raw: str) -> dict:
         _err("Resolution decision flags must be booleans")
 
     # Cross-field coherence: a boolean must not contradict the enum it summarises.
+    #
+    # Every one of these pairs has exactly one sensible reading, so a disagreement between the
+    # enum and its flag means the validator was reasoning incoherently and the decision is
+    # rejected rather than stored.
+    #
+    #   KEPT      requires deadline_met      — "delivered as promised, by the deadline"
+    #   KEPT_LATE requires NOT deadline_met  — being late is the entire meaning of KEPT_LATE,
+    #                                            so a KEPT_LATE that claims the deadline was
+    #                                            met is self-refuting
+    #   UNCHANGED requires NOT scope_change  — nothing changed, by definition
+    #
+    # Note what is deliberately NOT here: NOT_KEPT with deadline_met true is coherent (the
+    # deadline passed and nothing was delivered), and PARTIAL works with either. An earlier
+    # revision carried a NOT_KEPT check written as
+    # `delivery in (D_NOT_KEPT,) and deadline_met and delivery != D_NOT_KEPT`, whose final
+    # clause contradicted its first — so it could never fire, and its presence suggested a
+    # guard that did not exist. KEPT_LATE, the case that genuinely needs one, was unguarded.
     if delivery == D_KEPT and not deadline_met:
         _err("Incoherent decision: KEPT delivery with deadline_met false")
-    if delivery in (D_NOT_KEPT,) and deadline_met and delivery != D_NOT_KEPT:
-        _err("Incoherent decision")
+    if delivery == D_KEPT_LATE and deadline_met:
+        _err("Incoherent decision: KEPT_LATE delivery with deadline_met true")
     if integrity == I_UNCHANGED and scope_change:
         _err("Incoherent decision: UNCHANGED integrity with material_scope_change true")
 
@@ -475,20 +492,33 @@ def _classify_relation(statement: str) -> str:
     record. Semantic authority remains with the consensus-driven resolution; this
     function never affects delivery or integrity.
     """
+    import re
+
+    # Word-boundary matching, not substring.
+    #
+    # Plain `in` testing matched inside unrelated words: "may" fired on "dismay" and
+    # "Mayfield", "aim" on "reclaim", "partner" on "counterpart". A hint that mislabels a
+    # statement because of an unrelated word is worse than one that declines to guess.
     text = statement.lower()
-    if any(
-        marker in text
-        for marker in ["revers", "cancel", "withdraw", "no longer", "will not", "instead of"]
-    ):
+
+    def hits(patterns):
+        for pattern in patterns:
+            if re.search(r"\b(?:" + pattern + r")\b", text):
+                return True
+        return False
+
+    # Raw strings: "\w" in an ordinary string is an invalid escape sequence, so the stems
+    # would silently degrade to a literal backslash-w instead of matching any word character.
+    if hits([r"revers\w*", r"cancel\w*", r"withdraw\w*", "no longer", "will not", "instead of"]):
         return R_REVERSED
-    if any(
-        marker in text
-        for marker in ["selected", "limited", "only for", "a few", "partner", "invite"]
-    ):
+    if hits(["selected", "limited", "only for", "a few", r"partner\w*", r"invite\w*"]):
         return R_NARROWED
-    if any(marker in text for marker in ["reframe", "redefine", "what we mean", "clarify"]):
+    if hits([r"reframe\w*", r"redefine\w*", "what we mean", r"clarif\w*"]):
         return R_REFRAMED
-    if any(marker in text for marker in ["may", "might", "aim", "target", "hoping", "soon"]):
+    # `hop\w*` rather than "hoping": the marker list had only the third-person form, so the far
+    # more common "we hope to ship" or "we hope to deliver" was classified UNRELATED — a
+    # statement that plainly softens a promise, reported as having no relation to it.
+    if hits(["may", "might", r"aim\w*", r"target\w*", r"hop\w*", "soon"]):
         return R_SOFTENED
     return R_UNRELATED
 
@@ -740,6 +770,11 @@ class PromiseDecay(gl.Contract):
 
         A response is never an 'official project response' unless ownership is
         verified; it is attributed to the submitting address and nothing more.
+
+        Deliberately the one write that stays open after FINAL. Evidence and drift are part of
+        the adjudication record and close with the verdict; a response is commentary, and a
+        permanent record that cannot be answered would be a worse product than one that can.
+        Stated here so the asymmetry reads as a decision rather than an oversight.
         """
         self._require_promise(promise_id)
 

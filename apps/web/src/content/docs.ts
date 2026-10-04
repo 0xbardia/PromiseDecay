@@ -534,7 +534,7 @@ nginx                 :443 TLS         terminates, proxies /api to the API` },
               ["Network", "GenLayer Studionet"],
               ["Chain ID", "61999"],
               ["RPC", "https://studio.genlayer.com/api"],
-              ["Contract", "0x5F1C5C97ec9040FC76394419De3159C401bBDc05"],
+              ["Contract", "0x6B340D9C6230b31652aAbDC08acDAd763635A82b"],
             ],
           },
           {

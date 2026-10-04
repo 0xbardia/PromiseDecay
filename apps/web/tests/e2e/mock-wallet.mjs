@@ -21,12 +21,19 @@
 export const MOCK_WALLET = `
 (() => {
   const state = {
-    chainId: 0xf7a1,                 // 61999 — GenLayer Studionet
+    // Computed, not guessed: 61999 === 0xF22F.
+    //
+    // This mock originally used 0xf7a1, which is 63393, so the "connected, correct network"
+    // scenario was silently exercising the wrong-network path — and the app correctly refused
+    // it, which is how the mistake surfaced. A literal hex chain id in a test double is a
+    // trap; deriving it from the decimal id removes the class of error.
+    chainId: 0xf22f,
     accounts: ["0x1111111111111111111111111111111111111111"],
     rejectConnect: false,
     rejectWrite: false,
     autoConnect: true,
     requests: [],
+    signed: [],
     listeners: {},
   };
   window.__pdMock = state;
@@ -79,11 +86,21 @@ export const MOCK_WALLET = `
         case "eth_sendTransaction":
         case "gen_write":
         case "eth_signTransaction": {
+          // A wallet that asks to sign is asked to sign, and a wallet that is told to send
+          // sends. Both return a transaction hash; neither is a broadcast the SDK does itself.
           if (state.rejectWrite) throw reject("User rejected the request.", 4001);
           const supplied = (params && params[0]) || {};
+          state.signed.push({ method, tx: supplied });
           const seed = JSON.stringify(supplied) + state.requests.length;
           let h = "0x";
           for (let i = 0; i < 64; i++) h += ((seed.charCodeAt(i % seed.length) + i * 7) % 16).toString(16);
+
+          if (method === "eth_signTransaction") {
+            // Return a serialised transaction, not a hash: genlayer-js takes this value and
+            // broadcasts it itself with sendRawTransaction. A realistic stub returns signed
+            // bytes, so a hash-shaped string here would hide an integration mismatch.
+            return "0x" + h.slice(2) + h.slice(2);
+          }
           return h;
         }
 
@@ -116,7 +133,7 @@ export const MOCK_WALLET = `
 
 /** Scenario presets, applied as a second init script so they run after MOCK_WALLET. */
 export const SCENARIOS = {
-  connected: "window.__pdMock.chainId = 0xf7a1; window.__pdMock.autoConnect = true;",
+  connected: "window.__pdMock.chainId = 0xf22f; window.__pdMock.autoConnect = true;",
   wrongNetwork: "window.__pdMock.chainId = 0x1; window.__pdMock.autoConnect = true;",
   rejectConnect: "window.__pdMock.rejectConnect = true;",
   rejectWrite: "window.__pdMock.rejectWrite = true;",

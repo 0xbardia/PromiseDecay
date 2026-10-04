@@ -174,7 +174,7 @@ console.log(`\n=== 2. Real promise discovery + detail ===\n`);
 // ---------------------------------------------------------------------------------------
 console.log(`\n=== 3. Wallet: connect, wrong network, rejection ===\n`);
 for (const [name, script] of [
-  ["connected", "window.__pdMock.chainId = 0xf7a1;"],
+  ["connected", "window.__pdMock.chainId = 0xf22f;"],
   ["wrong-network", "window.__pdMock.chainId = 0x1;"],
   ["rejected", "window.__pdMock.rejectConnect = true;"],
 ]) {

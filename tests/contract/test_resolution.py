@@ -105,7 +105,13 @@ def test_second_resolution_rejected(direct_deploy, direct_vm):
     "delivery,integrity,dm,sc",
     [
         ("KEPT", "UNCHANGED", True, False),
-        ("KEPT_LATE", "UNCHANGED", True, False),
+        # KEPT_LATE means the deadline was missed, so deadline_met must be false.
+        # This row previously asserted `True`, which the contract accepted only because its
+        # guard for this case was dead code (see PD-SEC-021). The old value encoded the bug,
+        # so it was corrected rather than preserved.
+        ("KEPT_LATE", "UNCHANGED", False, False),
+        # NOT_KEPT with the deadline met is coherent: the date passed, nothing was delivered.
+        ("NOT_KEPT", "UNCHANGED", True, False),
         ("PARTIAL", "NARROWED", False, True),
         ("NOT_KEPT", "REVERSED", False, False),
         ("UNRESOLVED", "UNKNOWN", False, False),
@@ -170,6 +176,13 @@ BAD_OUTPUTS = {
         {"delivery": "PARTIAL", "integrity": "UNCHANGED", "deadline_met": False,
          "material_scope_change": True, "explanation": "x"}
     ),
+    # KEPT_LATE claims the deadline was met, which is self-refuting: being late is the entire
+    # meaning of the enum. Previously accepted, because the guard that should have caught this
+    # was written with a condition that contradicted itself and could never fire.
+    "incoherent kept_late": json.dumps(
+        {"delivery": "KEPT_LATE", "integrity": "UNCHANGED", "deadline_met": True,
+         "material_scope_change": False, "explanation": "x"}
+    ),
 }
 
 
@@ -206,7 +219,11 @@ def test_markdown_fenced_json_is_accepted(direct_deploy, direct_vm):
     advance_past_deadline(direct_vm)
     mock_resolution(
         direct_vm,
-        '```json\n' + decision("KEPT_LATE", "UNCHANGED") + "\n```",
+        # deadline_met is stated explicitly: the helper defaults it to True, which is correct
+        # for KEPT but self-refuting for KEPT_LATE.
+        '```json\n'
+        + decision("KEPT_LATE", "UNCHANGED", deadline_met=False)
+        + "\n```",
     )
     c.request_resolution(pid)
     assert c.get_provisional_result(pid)["delivery"] == "KEPT_LATE"

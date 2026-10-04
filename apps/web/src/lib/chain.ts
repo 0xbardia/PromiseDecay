@@ -40,14 +40,26 @@ export const CONTRACT_ADDRESS = (import.meta.env.VITE_GENLAYER_CONTRACT_ADDRESS 
   | string
   | undefined) ?? null;
 
-/** Chain descriptor. Built locally so chain metadata needs no SDK import. */
-const GEN_CHAIN = {
-  id: CHAIN_ID,
-  name: NETWORK_NAME,
-  nativeCurrency: { name: "GEN Token", symbol: "GEN", decimals: 18 },
-  rpcUrls: { default: { http: [RPC_URL] } },
-  testnet: true,
-};
+/**
+ * Resolve genlayer-js's own chain descriptor for the configured chain id.
+ *
+ * The SDK's descriptor is used rather than one built by hand. genlayer-js dereferences
+ * `chainId`, `gasPrice` and the RPC transport while constructing a write, and a hand-rolled
+ * object that looked equivalent was missing them — so every write died client-side with
+ * `Cannot convert undefined to a BigInt` before a single request was sent. Failing loudly when
+ * the configured id has no descriptor is the correct alternative to silently guessing.
+ */
+function chainDescriptor(chains: Record<string, unknown>) {
+  const match = Object.values(chains).find(
+    (c) => (c as { id?: number })?.id === CHAIN_ID
+  );
+  if (!match) {
+    throw new Error(
+      `GenLayer SDK has no chain with id ${CHAIN_ID}. Check GENLAYER_CHAIN_ID in the environment.`
+    );
+  }
+  return match as never;
+}
 
 /** Terminal-ish states reported by GenLayer. */
 export const TERMINAL_STATES = new Set(["FINALIZED", "REVERTED", "UNDERCATED", "GENESIS"]);
@@ -110,6 +122,72 @@ export function getInjectedProvider(): EIP1193Provider | null {
   return eth ?? null;
 }
 
+/**
+ * Adapt an injected provider into the account shape genlayer-js expects.
+ *
+ * Three separate mistakes lived in this one adapter, and each produced a total write failure
+ * with a misleading message. They are documented together because the symptoms looked like
+ * wallet problems rather than wiring problems.
+ *
+ * 1. **The address.** genlayer-js reads `account.address`; an EIP-1193 provider exposes
+ *    `selectedAddress` instead. Handing it the raw provider left the address `undefined` and
+ *    every write died with viem's `Address "undefined" is invalid` before any request.
+ *
+ * 2. **The chain descriptor.** A hand-rolled descriptor looked equivalent but lacked the
+ *    fields the SDK dereferences (`chainId`, `gasPrice`), so writes failed with
+ *    `Cannot convert undefined to a BigInt`. The SDK's own descriptor is used instead.
+ *
+ * 3. **`type`.** genlayer-js branches on it: a `"local"` account is signed via
+ *    `account.signTransaction` and the signature is broadcast with `sendRawTransaction`;
+ *    anything else makes the SDK call `eth_sendTransaction` on the *node*, which does not
+ *    implement it. So a browser wallet must be presented as `type: "local"` and asked to sign
+ *    with `eth_signTransaction` — the signature then goes to the node, which is exactly the
+ *    split of responsibility the design intends.
+ *
+ * No key material exists in this file: the wallet signs, the node broadcasts, the server never
+ * sees either.
+ */
+function walletAccount(provider: EIP1193Provider, address: string) {
+  return {
+    address,
+    // Must be "local" — see (3) above.
+    type: "local" as const,
+    async signTransaction(tx: {
+      to?: string;
+      data?: string;
+      value?: bigint;
+      gas?: bigint;
+      gasPrice?: bigint;
+      nonce?: number;
+      chainId?: number;
+    }): Promise<string> {
+      const hex = (v: bigint | number | undefined) =>
+        v === undefined ? undefined : `0x${v.toString(16)}`;
+
+      const payload = {
+        from: address,
+        to: tx.to,
+        data: tx.data,
+        value: hex(tx.value ?? 0n),
+        gas: hex(tx.gas ?? 200_000n),
+        gasPrice: hex(tx.gasPrice),
+        nonce: tx.nonce === undefined ? undefined : hex(tx.nonce),
+        chainId: hex(tx.chainId ?? CHAIN_ID),
+      };
+
+      // One narrow cast, at the one boundary where it is genuinely needed: viem types
+      // `request` against its own RpcRequest union, which does not include this
+      // eth_signTransaction shape. The payload above is the real, complete transaction and
+      // the wallet validates it on its side.
+      const signed = (await provider.request({
+        method: "eth_signTransaction",
+        params: [payload],
+      } as never)) as string;
+      return signed;
+    },
+  };
+}
+
 export async function connect(): Promise<string[]> {
   const provider = getInjectedProvider();
   if (!provider) {
@@ -170,13 +248,15 @@ export async function writeContract(opts: WriteOptions): Promise<{ hash: string;
 
   report({ stage: "awaiting-wallet", hash: null, message: STAGE_COPY["awaiting-wallet"] });
 
-  // genlayer-js drives the injected provider directly: the user's wallet signs, and the
-  // server never holds a key.
-  const { createClient } = await loadGenlayer();
+  // The user's own wallet signs. The server never holds a key.
+  const accounts = await currentAccount(provider);
+  if (!accounts) throw new Error("Wallet is not connected.");
+
+  const { createClient, chains } = await loadGenlayer();
   const genClient = createClient({
-    chain: GEN_CHAIN as never,
+    chain: chainDescriptor(chains as never),
     endpoint: RPC_URL,
-    account: provider as never,
+    account: walletAccount(provider, accounts) as never,
   });
 
   let hash: string;

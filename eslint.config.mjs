@@ -105,6 +105,14 @@ export default tseslint.config(
     rules: { "no-console": "off" },
   },
 
+  // The indexer worker's stdout is a structured JSON logger, not stray debug output. It runs
+  // under PM2, where stdout is the only channel an operator has to see what it is doing, so
+  // silencing console.log here would remove the observability rather than the noise.
+  {
+    files: ["apps/indexer/src/worker.ts"],
+    rules: { "no-console": "off" },
+  },
+
   // Disables stylistic rules that conflict with formatting.
   prettier,
 );

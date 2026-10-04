@@ -114,7 +114,7 @@ Deployed on **GenLayer Studionet (chain 61999)**:
 
 | | |
 |---|---|
-| **Contract** | `0x5F1C5C97ec9040FC76394419De3159C401bBDc05` |
+| **Contract** | `0x6B340D9C6230b31652aAbDC08acDAd763635A82b` |
 | **Deployment tx** | `0x608ff1aa1e6b95ef3af257ee40db16ced3fdd967ad44ad4c15c5be28fdbe55eb` |
 | **Runtime pin** | `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6` |
 | **Source sha256** | `6c55140b299c7dab83676d4e0f4a41ad85326db873d7e30ad39f6a7552febb42` |

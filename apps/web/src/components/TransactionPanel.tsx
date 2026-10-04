@@ -159,7 +159,7 @@ export function TransactionPanel({
             style={{ fontSize: "0.92rem" }}
             style-color-var="--text-secondary"
           >
-            {message}
+            <span data-testid="tx-message">{message}</span>
           </p>
 
           {hash ? (

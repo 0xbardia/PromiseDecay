@@ -9,6 +9,17 @@ import react from "@vitejs/plugin-react";
  */
 export default defineConfig({
   plugins: [react()],
+
+  // Vite loads .env files from its `root`, which is this package. The single .env for the
+  // whole monorepo lives at the repository root, so without this every `import.meta.env.VITE_*`
+  // resolved to undefined and the built bundle silently contained no configuration at all.
+  //
+  // This stayed hidden because most of the values have matching defaults in chain.ts — the RPC
+  // URL and chain id happened to be right — so only VITE_GENLAYER_CONTRACT_ADDRESS, which has
+  // no sensible default, exposed it. The promise detail page kept showing a contract address
+  // because it reads that value from the API response, not from the bundle, which made the
+  // broken configuration look healthy until someone actually tried to submit a transaction.
+  envDir: "../..",
   build: {
     target: "es2022",
     sourcemap: false, // do not ship source maps to production

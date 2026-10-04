@@ -540,6 +540,131 @@ the fetch layer, which is outside the contract's reach — noted in the threat m
 
 ---
 
+### PD-SEC-021 — Cross-field coherence guard was dead code; the case needing one was unguarded
+
+| | |
+|---|---|
+| **Severity** | Medium (integrity of recorded verdicts) |
+| **Component** | `contracts/PromiseDecay.py`, `tests/contract/test_resolution.py` |
+| **Status** | **Fixed** |
+
+**Description.** `_parse_decision` rejects a decision whose boolean flags contradict its enums.
+One of those checks could never fire:
+
+```python
+if delivery in (D_NOT_KEPT,) and deadline_met and delivery != D_NOT_KEPT:
+    _err("Incoherent decision")
+```
+
+The first clause establishes `delivery == D_NOT_KEPT`; the third requires
+`delivery != D_NOT_KEPT`. The conjunction is unsatisfiable, so the branch was dead. Its presence
+in a security-relevant validator advertised a guard that did not exist.
+
+Meanwhile `KEPT_LATE` with `deadline_met=true` was accepted. Being late is the entire meaning
+of that enum, so a decision claiming the deadline was met is self-refuting — and it was the case
+that genuinely needed a check.
+
+A test had encoded the wrong behaviour: the acceptance table asserted
+`("KEPT_LATE", "UNCHANGED", True, False)`, and the markdown-fenced-JSON test inherited the same
+value from a `decision()` helper that defaults `deadline_met` to `True`. Both were corrected
+rather than preserved.
+
+**Resolution.** Replaced the dead branch with a real `KEPT_LATE` guard, documented why
+`NOT_KEPT` with `deadline_met=true` is deliberately *not* rejected (the deadline passed and
+nothing was delivered — that is coherent), and added the rejected case to `BAD_OUTPUTS`.
+
+---
+
+### PD-SEC-022 — The production bundle contained no configuration at all
+
+| | |
+|---|---|
+| **Severity** | **Critical** (availability — every write failed) |
+| **Component** | `apps/web/vite.config.ts` |
+| **Status** | **Fixed** |
+
+**Description.** Vite loads `.env` files from its `root`, which is `apps/web`. The monorepo's
+single `.env` lives at the repository root, so Vite never saw it and every
+`import.meta.env.VITE_*` resolved to `undefined`. The built bundle contained no contract
+address, no RPC URL and no chain id.
+
+This stayed invisible for two reasons. Most values have matching fallbacks in `chain.ts` — the
+RPC URL and chain id happened to be correct — so only `VITE_GENLAYER_CONTRACT_ADDRESS`, which
+has no sensible default, exposed it. And the promise detail page kept displaying a correct
+contract address because it reads that value from the API response, not from the bundle. Every
+read path looked healthy. No user could submit a single write: the guard reported
+"Contract address is not configured."
+
+Confirmed directly: `grep -c '5F1C5C97…' apps/web/dist/assets/index-*.js` returned `0`.
+
+**Resolution.** Set `envDir: "../.."` so Vite reads the root `.env`, and verified the address is
+present in the bundle actually served over HTTPS.
+
+---
+
+### PD-SEC-023 — Browser write path was unwireable: three defects in one account adapter
+
+| | |
+|---|---|
+| **Severity** | **Critical** (availability — every write failed) |
+| **Component** | `apps/web/src/lib/chain.ts` |
+| **Status** | **Fixed** |
+
+**Description.** The injected EIP-1193 provider was passed straight through as genlayer-js's
+`account`. Three separate assumptions were wrong, each producing a total write failure with a
+message that pointed at the wallet rather than at the code.
+
+1. **Address.** genlayer-js reads `account.address`; an EIP-1193 provider exposes
+   `selectedAddress`. Every write died client-side with viem's `Address "undefined" is invalid`
+   before a single request was sent.
+2. **Chain descriptor.** A hand-rolled descriptor looked equivalent but lacked the fields the
+   SDK dereferences while building a write (`chainId`, `gasPrice`), producing
+   `Cannot convert undefined to a BigInt`. The SDK's own descriptor is now resolved by chain id.
+3. **Account type.** genlayer-js branches on it: a `"local"` account is signed via
+   `account.signTransaction` and the signature is broadcast with `sendRawTransaction`; any other
+   type makes the SDK call `eth_sendTransaction` on the *node*, which does not implement it.
+
+**Resolution.** A `walletAccount` adapter presents the provider as `type: "local"`, exposes the
+real address, and signs with `eth_signTransaction`. Verified against the deployed app: the RPC
+sequence is `eth_getTransactionCount → eth_estimateGas → eth_gasPrice → eth_sendRawTransaction`,
+the wallet is asked to sign exactly once, and it receives a complete transaction (`from`, `to`,
+`data` with selector and arguments, `value`, `gas`, `nonce`, `chainId`). No key material exists
+in the file — the wallet signs, the node broadcasts, the server never sees either.
+
+`apps/web/scripts/txlifecycle.mjs` (`pnpm --filter @promisedecay/web tx-lifecycle`) drives the
+full stage machine: 24/24 checks across progression to final, direct final, reverted, undercated,
+wallet rejection, wrong network, wallet disconnect mid-flight and page refresh mid-flight.
+
+**Not proven by this:** a real signature reaching a real node. A mock cannot produce valid
+signature bytes, so broadcast is stubbed in the harness. That remains the honest limitation.
+
+---
+
+### PD-SEC-024 — Drift relation classifier matched substrings inside unrelated words
+
+| | |
+|---|---|
+| **Severity** | Low (misleading UI hint) |
+| **Component** | `contracts/PromiseDecay.py` |
+| **Status** | **Fixed** |
+
+**Description.** `_classify_relation` is a deterministic UI hint and never influences delivery
+or integrity, which come from consensus. That limited its severity — but it also meant nothing
+would catch a wrong label. Plain `in` testing matched marker text inside unrelated words: `may`
+fired on "dismay" and "Mayfield", `aim` on "reclaim", `partner` on "counterpart".
+
+The marker list also held only `hoping`, so the far more common "we hope to ship" was classified
+`UNRELATED` — a statement that plainly softens a promise reported as having no relation to it.
+
+**Resolution.** Word-boundary matching with explicit raw strings (`\w` in an ordinary string is
+an invalid escape and silently degrades to a literal backslash-w), plus `hop\w*`. Seven
+regression cases in `tests/contract/test_relation_classification.py` cover inflections,
+multi-word markers, unrelated substrings, and the severity ordering between blocks.
+
+---
+
+---
+
 ### PD-SEC-020 — Write flows were unreachable, and validation unreachable behind a disabled button
 
 | | |
