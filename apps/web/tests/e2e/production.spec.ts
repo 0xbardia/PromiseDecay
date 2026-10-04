@@ -410,6 +410,43 @@ test.describe("accessibility", () => {
     expect(scroll, "smooth scrolling should be restored when motion is allowed").toBe("smooth");
   });
 
+  test("search filters as you type, without pressing Enter", async ({ page }) => {
+    // Regression: the field applied a query only on form submit, and the form has no visible
+    // submit control. Typing did nothing, so the search box looked broken to anyone who did
+    // not happen to press Enter. This asserts typing alone is enough.
+    await page.goto("/explore");
+    const cards = page.getByTestId("promise-card");
+    await expect(cards.first()).toBeVisible({ timeout: 25_000 });
+    const total = await cards.count();
+    expect(total).toBeGreaterThan(0);
+
+    // A term that cannot match anything, so the direction of the change is unambiguous.
+    const search = page.getByTestId("explore-search");
+    await search.fill("zzzznomatchzzzz");
+    await expect(cards).toHaveCount(0, { timeout: 10_000 });
+
+    // The empty state must say so, rather than leaving a blank page.
+    await expect(page.getByTestId("explore-search-status")).toContainText(/no promises match/i);
+
+    // A term drawn from a live record narrows to fewer than everything.
+    await search.fill("a");
+    await expect.poll(async () => cards.count(), { timeout: 10_000 }).toBeLessThan(total + 1);
+
+    await search.fill("");
+    await expect(cards).toHaveCount(total, { timeout: 10_000 });
+  });
+
+  test("search result count is announced", async ({ page }) => {
+    // The status line is what makes typing visibly do something; without it the page looks
+    // inert even though the query is applied.
+    await page.goto("/explore");
+    await expect(page.getByTestId("promise-card").first()).toBeVisible({ timeout: 25_000 });
+    const status = page.getByTestId("explore-search-status");
+    await expect(status).toHaveAttribute("aria-live", "polite");
+    await page.getByTestId("explore-search").fill("zzzznomatchzzzz");
+    await expect(status).toContainText(/no promises match/i, { timeout: 10_000 });
+  });
+
   test("status is never conveyed by colour alone", async ({ page }) => {
     await page.goto("/explore");
     await expect(page.getByTestId("promise-card").first()).toBeVisible({ timeout: 25_000 });
