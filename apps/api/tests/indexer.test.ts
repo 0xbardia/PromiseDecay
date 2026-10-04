@@ -388,3 +388,76 @@ describe("child collections", () => {
     expect(rows[0]?.verified).toBe(false);
   });
 });
+describe("orphan child rows", () => {
+  /**
+   * Regression.
+   *
+   * The schema declares no foreign keys, so deleting a promise leaves its evidence, drift,
+   * responses and challenges behind. That was live on the deployment: evidence rows referenced
+   * promise ids 5-9 while the promises table held only 1-4, left over from a superseded contract.
+   *
+   * It is not only untidy. Promise ids restart at 1 on a new deployment, so an orphan can be
+   * attached to a completely unrelated promise and presented as evidence for its claim.
+   */
+  it("prunes children whose parent promise does not exist", async () => {
+    await syncOnce(db, fakeReader(SAMPLE), silent);
+    await expect(countPromises()).resolves.toBe(2);
+
+    // Plant children under an id that is not in the projection. Explicit inserts rather than a
+    // generic row builder: drizzle column keys are camelCase while Object.keys(table) yields SQL
+    // names, so a reflective builder silently drops the required promise_id.
+    const GHOST = "999";
+    await db.insert(evidenceTable).values({
+      promiseId: GHOST,
+      ordinal: 0,
+      submitter: "0xdead",
+      sourceUrl: "https://orphan.example/e",
+      quote: "orphaned evidence",
+      kind: "SOURCE",
+      submittedTs: 0,
+      dedupe: "orphan-e",
+    } as never);
+    await db.insert(driftTable).values({
+      promiseId: GHOST,
+      ordinal: 0,
+      submitter: "0xdead",
+      statement: "The promise was silently narrowed.",
+      relationship: "NARROWED",
+      sourceUrl: "https://orphan.example/d",
+      submittedTs: 0,
+    } as never);
+    await db.insert(responsesTable).values({
+      promiseId: GHOST,
+      ordinal: 0,
+      submitter: "0xdead",
+      statement: "We stand by the original commitment.",
+      sourceUrl: "https://orphan.example/r",
+      submittedTs: 0,
+    } as never);
+    await db.insert(challengesTable).values({
+      promiseId: GHOST,
+      ordinal: 0,
+      challenger: "0xdead",
+      reason: "Disputing a promise that no longer exists.",
+      evidenceUrl: "https://orphan.example/c",
+      submittedTs: 0,
+    } as never);
+
+    // Any child under a promise the chain reports must have been removed.
+    await syncOnce(db, fakeReader(SAMPLE), silent);
+
+    const check = async (table: unknown) => {
+      const rows = (await db.select().from(table as never)) as Array<{ promiseId?: string }>;
+      return rows.filter((r) => r.promiseId === "999").length;
+    };
+    expect(await check(evidenceTable)).toBe(0);
+    expect(await check(driftTable)).toBe(0);
+    expect(await check(responsesTable)).toBe(0);
+    expect(await check(challengesTable)).toBe(0);
+
+    // And the legitimate children are untouched.
+    const surviving = (await db.select().from(evidenceTable)) as Array<{ promiseId?: string }>;
+    expect(surviving.length).toBeGreaterThan(0);
+    expect(surviving.every((r) => r.promiseId !== "999")).toBe(true);
+  });
+});

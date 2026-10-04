@@ -10,7 +10,7 @@
  *  - Fault-tolerant. One bad promise is recorded as an error and the run continues; a
  *    transient RPC failure is retried with backoff rather than crashing the worker.
  */
-import { eq, sql as dsql } from "drizzle-orm";
+import { eq, getTableName, sql as dsql } from "drizzle-orm";
 import { slugifyProject } from "@promisedecay/domain";
 import type { Database } from "../db/client.js";
 import {
@@ -284,7 +284,19 @@ async function alignProjectionToContract(
     logger.warn({ from: recorded, to: contract }, "contract changed; rebuilding projection");
   }
 
-  // Child rows cascade from promises.
+  // Children are deleted explicitly, not cascaded.
+  //
+  // This comment used to claim "Child rows cascade from promises". They do not: the schema
+  // declares no foreign keys at all, so deleting a promise leaves its evidence, drift,
+  // responses and challenges behind forever.
+  //
+  // The cost is not only storage. Promise ids restart at 1 on a new deployment, so orphaned
+  // rows from the previous contract would be joined onto a *different* promise that happens to
+  // reuse the same id — showing one contract's evidence as though it supported another's
+  // claim. That is a correctness failure, not a housekeeping one.
+  for (const table of [evidence, drift, responses, challenges]) {
+    await db.delete(table);
+  }
   await db.delete(promises);
   await db.delete(projects);
 
@@ -312,6 +324,10 @@ async function pruneVanished(
   if (stale.length === 0) return 0;
 
   for (const id of stale) {
+    // Children go with the parent. Without this, dropping a promise strands its evidence.
+    for (const table of [evidence, drift, responses, challenges]) {
+      await db.delete(table).where(eq(table.promiseId, id));
+    }
     await db.delete(promises).where(eq(promises.promiseId, id));
   }
 
@@ -319,6 +335,33 @@ async function pruneVanished(
   // simply did not run, and the operator has no way to tell the two apart from the outside.
   logger.warn({ removed: stale.length, ids: stale }, "pruned promises no longer on chain");
   return stale.length;
+}
+
+/**
+ * Remove child rows whose parent promise no longer exists.
+ *
+ * Safety net for orphans written before this was fixed, and for any path that deletes a promise
+ * without its children. An orphaned evidence row is worse than a missing one: promise ids restart
+ * per deployment, so it could later be attributed to an unrelated promise.
+ */
+async function pruneOrphans(db: Database, logger: IndexerLogger): Promise<number> {
+  let removed = 0;
+  for (const table of [evidence, drift, responses, challenges]) {
+    // getTableName(), not the table object inside a plain template literal: the latter
+    // stringifies to "[object Object]" and Postgres rejects it with a syntax error.
+    const r = await db.execute(dsql`
+      with deleted as (
+        delete from ${dsql.identifier(getTableName(table))} c
+        where not exists (select 1 from promises p where p.promise_id = c.promise_id)
+        returning 1
+      ) select count(*)::int as n from deleted
+    `);
+    removed += Number(Array.isArray(r) ? (r[0]?.n ?? 0) : 0);
+  }
+  if (removed > 0) {
+    logger.warn({ removed }, "pruned child rows whose promise no longer exists");
+  }
+  return removed;
 }
 
 /**
@@ -336,6 +379,7 @@ export async function syncOnce(
   const contract = reader.contractAddress.toLowerCase();
 
   await alignProjectionToContract(db, contract, logger);
+  await pruneOrphans(db, logger);
 
   const ids = await reader.getAllPromiseIds();
 
