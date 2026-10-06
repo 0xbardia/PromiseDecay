@@ -8,8 +8,30 @@
 | Network | GenLayer Studionet |
 | Chain ID | `61999` |
 | RPC | `https://studio.genlayer.com/api` |
-| Contract | `0x6B340D9C6230b31652aAbDC08acDAd763635A82b` |
+| Contract | `0x742210deAab5d1A45F68675b1Ed0be2f621671c5` (version `1.0.1`) |
 | Explorer | `https://explorer-studio.genlayer.com` |
+
+## Deployment history
+
+| | Address | Version | Status |
+|---|---|---|---|
+| **Production** | `0x742210deAab5d1A45F68675b1Ed0be2f621671c5` | `1.0.1` | Active. Deployed from commit `e070d2ee9e95cfd8ffa05252c9aeaaa41232ff72`, source sha256 `32f6a82e0d46362d8c51bf584aa1eb89823e21f91c9e9540336c558e968a864b`, deployment tx `0x27023d8d63f08f5359a6b688b02c87fd8d0c026d64909c7557e161b795ca3c00`. Challenge window 7 days. |
+| **Legacy V1** | `0x6B340D9C6230b31652aAbDC08acDAd763635A82b` | `1.0.0` | Superseded and untouched. Holds the original four records (ids 1–4). No longer read by the app, API or indexer. |
+
+The on-chain source of the production contract is byte-identical to `contracts/PromiseDecay.py`
+at the commit above (`gen_getContractCode`, sha256 compared). The legacy contract also reported `1.0.0` before this release, so the version was bumped to `1.0.1`
+to make `get_version` distinguish the two deployments.
+
+When the indexer sees a different `GENLAYER_CONTRACT_ADDRESS` from the one its projection was
+built from, it discards the previous deployment's rows, so legacy records are excluded from the
+active app rather than shown as if they belonged to the new contract.
+
+### Test-only short-window fixture
+
+`scripts/make-test-fixture-source.mjs` derives a throwaway copy of the production source that
+differs in exactly two lines (the challenge window and a `-TEST-SHORT-WINDOW` version suffix). It
+exists only to certify `finalize` within one session. It is deployed to its own address, is never
+configured as the production contract, and the production source keeps its seven-day window.
 
 The contract address is the one this documentation is written against. If the contract is
 redeployed, this file, `README.md` and the GitHub release must be updated together. An

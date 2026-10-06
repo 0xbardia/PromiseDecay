@@ -120,10 +120,17 @@ Deployed on **GenLayer Studionet (chain 61999)**:
 
 | | |
 |---|---|
-| **Contract** | `0x6B340D9C6230b31652aAbDC08acDAd763635A82b` |
-| **Deployment tx** | `0x608ff1aa1e6b95ef3af257ee40db16ced3fdd967ad44ad4c15c5be28fdbe55eb` |
+| **Contract** | `0x742210deAab5d1A45F68675b1Ed0be2f621671c5` |
+| **Version** | `1.0.1` |
+| **Deployment tx** | `0x27023d8d63f08f5359a6b688b02c87fd8d0c026d64909c7557e161b795ca3c00` |
 | **Runtime pin** | `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6` |
-| **Source sha256** | `6c55140b299c7dab83676d4e0f4a41ad85326db873d7e30ad39f6a7552febb42` |
+| **Source sha256** | `32f6a82e0d46362d8c51bf584aa1eb89823e21f91c9e9540336c558e968a864b` |
+| **Source commit** | `e070d2ee9e95cfd8ffa05252c9aeaaa41232ff72` |
+| **Challenge window** | 7 days |
+
+**Legacy V1 deployment** (`1.0.0`, superseded): `0x6B340D9C6230b31652aAbDC08acDAd763635A82b`. It still exists on chain and is untouched,
+but it predates the decision-input and lifecycle fixes and is no longer read by this app. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#deployment-history).
 
 Why Python and GenLayer at all: deciding whether a public article supports the claim that a
 mainnet launched is a question no amount of deterministic code can answer. It needs

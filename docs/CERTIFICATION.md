@@ -1,4 +1,7 @@
-# PromiseDecay — Deployed Read-Method Certification
+# PromiseDecay — Deployed Read-Method Certification (legacy V1 deployment)
+
+> This record certifies the **legacy V1 contract** (`1.0.0`). It is kept as history. The active
+> production contract is `0x742210deAab5d1A45F68675b1Ed0be2f621671c5` (`1.0.1`); see [DEPLOYMENT.md](DEPLOYMENT.md#deployment-history).
 
 **Contract:** `0x6B340D9C6230b31652aAbDC08acDAd763635A82b`  
 **Network:** GenLayer Studionet (chain 61999)  
