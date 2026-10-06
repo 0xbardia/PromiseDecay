@@ -72,9 +72,9 @@ is the supported source.
 | `add_drift` | Promise exists, not final, statement ≥ 8 chars, collection not full |
 | `submit_response` | Promise exists, statement ≥ 4 chars, collection not full |
 | `request_resolution` | Promise exists, not final, no prior result, deadline passed |
-| `challenge` | Provisional result exists, inside window, reason ≥ 12 chars, evidence URL not already used |
-| `re_evaluate` | Provisional exists, inside window, at least one challenge recorded |
-| `finalize` | Provisional exists, challenge window closed |
+| `challenge` | Provisional result exists, lifecycle is `CHALLENGE_WINDOW`, inside window, rounds remain, evidence URL not already used |
+| `re_evaluate` | A challenge exists, the current window is open or a new challenge is pending, and rounds remain |
+| `finalize` | Provisional exists, no pending challenge, lifecycle is `CHALLENGE_WINDOW`, challenge window closed |
 
 ## Read methods
 

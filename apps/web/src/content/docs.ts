@@ -208,7 +208,7 @@ class PromiseDecay(gl.Contract):
               ["add_drift", "Attaches a later statement without touching the original"],
               ["submit_response", "Records a public response attributed to the sender"],
               ["request_resolution", "Runs semantic consensus and records a provisional result"],
-              ["challenge", "Inside the window, with materially new evidence; triggers re-evaluation"],
+              ["challenge", "Records materially new evidence and moves the promise to RESOLVING"],
               ["re_evaluate", "Re-runs consensus after a challenge"],
               ["finalize", "Closes the record after the challenge window; never regresses"],
             ],

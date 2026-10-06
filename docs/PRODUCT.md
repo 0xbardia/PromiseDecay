@@ -86,7 +86,7 @@ OPEN → DUE → RESOLVING → PROVISIONAL → CHALLENGE_WINDOW → FINAL
 
 - Resolution may not begin before the deadline.
 - A challenge must be inside the window and must bring materially new evidence.
-- A challenge is permanently recorded and triggers genuine re-evaluation.
+- A challenge is permanently recorded; a separate public transaction runs genuine re-evaluation.
 - Finalization may not happen before the window closes.
 - A final result never regresses.
 

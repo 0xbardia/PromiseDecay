@@ -11,13 +11,13 @@ from conftest import CONTRACT, FUTURE, make_promise  # noqa: F401
 
 def test_deploy_and_version(direct_deploy):
     c = direct_deploy(CONTRACT)
-    assert c.get_version() == "1.0.0"
+    assert c.get_version() == "1.0.1"
 
 
 def test_config_exposes_bounds_and_enums(direct_deploy):
     c = direct_deploy(CONTRACT)
     cfg = c.get_config()
-    assert cfg["contract_version"] == "1.0.0"
+    assert cfg["contract_version"] == "1.0.1"
     assert cfg["max_quote"] == 1200
     assert cfg["challenge_window_seconds"] == 7 * 24 * 60 * 60
     assert "PARTIAL" in cfg["delivery_values"]
@@ -43,7 +43,7 @@ def test_create_promise_returns_id_and_stores_dna(direct_deploy):
     assert dna["action"] == "launch"
     assert dna["scope"] == "public"
     assert int(dna["deadline_ts"]) == FUTURE
-    assert dna["contract_version"] == "1.0.0"
+    assert dna["contract_version"] == "1.0.1"
     assert int(dna["created_ts"]) > 0
     assert dna["creator"] != ""
 

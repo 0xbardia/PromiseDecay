@@ -162,8 +162,9 @@ export const BOUNDS = {
   MAX_DRIFT: 64,
   MAX_RESPONSES: 32,
   MAX_CHALLENGES: 16,
+  MAX_CHALLENGE_ROUNDS: 3,
   CHALLENGE_WINDOW_SECONDS: 7 * 24 * 60 * 60,
-  CONTRACT_VERSION: "1.0.0",
+  CONTRACT_VERSION: "1.0.1",
 } as const;
 
 // ---------------------------------------------------------------------------------------

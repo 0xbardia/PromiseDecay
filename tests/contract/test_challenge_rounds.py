@@ -123,7 +123,7 @@ def test_a_record_can_still_reach_final_after_the_cap(direct_deploy, direct_vm):
 
 
 def test_the_cap_leaves_the_ordinary_challenge_path_working(direct_deploy, direct_vm):
-    """A single challenge and a single re-evaluation must still behave normally."""
+    """A later challenge gets a fresh evaluation before the result can be finalized."""
     c = direct_deploy(CONTRACT)
     pid = challenged_promise(c, direct_vm)
 
@@ -140,6 +140,8 @@ def test_the_cap_leaves_the_ordinary_challenge_path_working(direct_deploy, direc
         "https://example.com/second-distinct-source",
     )
     assert len(json.loads(c.get_challenges(pid))) == 2
+    c.re_evaluate(pid)
+    assert c.get_lifecycle_status(pid) == "CHALLENGE_WINDOW"
 
     jump_past_window(direct_vm)
     c.finalize(pid)

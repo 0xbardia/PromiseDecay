@@ -10,7 +10,8 @@ import { BOUNDS, URL_REJECTION_MESSAGE, checkSourceUrl, promiseRef } from "@prom
 import { EmptyState, GlassSurface, Notice, StatusChip } from "../components/primitives";
 import { TransactionPanel } from "../components/TransactionPanel";
 import { api, type ApiPromiseDetail } from "../lib/api";
-import { connect, currentChainId } from "../lib/chain";
+import { connect, currentChainId, readPromiseContractState } from "../lib/chain";
+import { lifecycleActions } from "../lib/lifecycle";
 
 type Mode = "evidence" | "update" | "respond" | "challenge";
 
@@ -38,17 +39,7 @@ const MODE_CONFIG: Record<
     lede: "Point at something anyone can open and check. Evidence is stored permanently and linked to this promise.",
     action: "Add evidence",
     cta: "Sign and add this evidence",
-    // Two things a contributor is entitled to know before spending a transaction.
-    //
-    // Exact duplicates are rejected, so the same source and quote cannot be added twice.
-    //
-    // And a resolution does not read every source: the contract fetches at most three
-    // admissible sources per resolution, to keep the prompt bounded. That limit was documented
-    // for operators but never shown to the person contributing evidence, which is exactly the
-    // wrong way round in a product whose claim is that the record stays inspectable. Adding a
-    // fourth source is still recorded and still visible — it is simply not guaranteed to be
-    // the one the validators read.
-    note: "Exact duplicates are rejected. A resolution reads at most 3 sources, so earlier admissible evidence is more likely to be weighed — but everything you add stays on the record either way.",
+    note: "Exact duplicates are rejected. Each resolution fetches at most three source pages, prioritizing the original source, relevant drift and the newest challenge before supplemental evidence.",
     fields: [
       {
         key: "sourceUrl",
@@ -125,7 +116,7 @@ const MODE_CONFIG: Record<
   },
   challenge: {
     title: "Challenge this result",
-    lede: "A provisional result stays open for a bounded window. A challenge must bring materially new evidence and triggers real re-evaluation.",
+    lede: "A provisional result stays open for a bounded window. A challenge records materially new evidence; a separate on-chain action then runs a fresh evaluation.",
     action: "Challenge result",
     cta: "Sign and submit this challenge",
     note: "The challenge must cite a source not already used as evidence, and your reason must explain what the verdict missed.",
@@ -180,6 +171,14 @@ export function PromiseAction({
   const [submitted, setSubmitted] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [chainStateReady, setChainStateReady] = useState(mode !== "challenge");
+  const [freshVerdict, setFreshVerdict] = useState<{
+    delivery: ApiPromiseDetail["delivery"];
+    integrity: ApiPromiseDetail["integrity"];
+    explanation: string | null;
+  } | null>(null);
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
   // A select's first option is the default the user sees, so it must also be the value in
   // state. Previously the <select> displayed "SOURCE" while `values.kind` stayed empty, which
@@ -201,10 +200,49 @@ export function PromiseAction({
 
   const load = useCallback(() => {
     if (!/^\d+$/.test(id)) return;
-    api.getPromise(id).then(setPromise).catch(() => setPromise(null));
-  }, [id]);
+    api
+      .getPromise(id)
+      .then((detail) => {
+        setPromise(detail);
+        if (mode === "challenge") {
+          setChainStateReady(false);
+          void readPromiseContractState(id)
+            .then((state) => {
+              setPromise({ ...detail, ...state });
+              setChainStateReady(true);
+            })
+            .catch((err) => {
+              setRefreshError((err as Error).message || "Could not read current contract state.");
+            });
+        }
+      })
+      .catch(() => setPromise(null));
+  }, [id, mode]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const refreshContractState = (showFreshVerdict = false) => {
+    setRefreshError(null);
+    setChainStateReady(false);
+    void readPromiseContractState(id)
+      .then((state) => {
+        setPromise((current) => (current ? { ...current, ...state } : current));
+        setChainStateReady(true);
+        if (showFreshVerdict) {
+          setFreshVerdict({
+            delivery: state.delivery ?? null,
+            integrity: state.integrity ?? null,
+            explanation: state.explanation ?? null,
+          });
+        }
+      })
+      .catch((err) => setRefreshError((err as Error).message || "Could not refresh contract state."));
+  };
 
   const errors = useMemo(() => {
     if (!config) return {} as Record<string, string>;
@@ -271,6 +309,7 @@ export function PromiseAction({
   }
 
   const valid = Object.keys(errors).length === 0;
+  const lifecycleState = promise ? lifecycleActions(promise, now) : null;
 
   const onConnect = async () => {
     setWalletError(null);
@@ -368,6 +407,19 @@ export function PromiseAction({
           <div style={{ marginTop: 16 }}>
             <Notice tone="warn" title="This promise is already final">
               A final resolution cannot be challenged. The challenge window has closed.
+            </Notice>
+          </div>
+        ) : null}
+
+        {mode === "challenge" && promise && !promise.isFinal && !lifecycleState?.challenge && !lifecycleState?.reEvaluate ? (
+          <div style={{ marginTop: 16 }}>
+            <Notice tone="warn" title="A challenge cannot be submitted in this state">
+              {promise.lifecycle === "CHALLENGE_WINDOW" &&
+              promise.challengeCount >= BOUNDS.MAX_CHALLENGE_ROUNDS
+                ? "The challenge rounds are exhausted. Finalize the result from the promise page after the window closes."
+                : promise.challengeClosesAt !== null && now >= promise.challengeClosesAt
+                  ? "The challenge window has closed. Finalize the result from the promise page."
+                  : "A provisional result must be in its open challenge window."}
             </Notice>
           </div>
         ) : null}
@@ -494,10 +546,22 @@ export function PromiseAction({
           <TransactionPanel
             action={config.action}
             ctaLabel={config.cta}
-            disabled={!valid || !account || (mode === "challenge" && promise?.isFinal === true)}
+            disabled={
+              !valid ||
+              !account ||
+              (mode === "challenge" && !chainStateReady) ||
+              ((mode === "evidence" || mode === "update") && promise?.isFinal === true) ||
+              (mode === "challenge" && lifecycleState?.challenge !== true)
+            }
             disabledReason={
               promise?.isFinal === true && mode === "challenge"
                 ? "This promise is already final."
+                : mode === "challenge" && lifecycleState?.challenge !== true
+                  ? "A challenge is only available in an open challenge window."
+                  : mode === "challenge" && !chainStateReady
+                    ? "Reading the current on-chain challenge state…"
+                  : ((mode === "evidence" || mode === "update") && promise?.isFinal === true)
+                    ? "Evidence and drift are closed after finalization."
                 : !valid
                   ? "Fix the highlighted fields before signing."
                   : "Connect your wallet to sign this write."
@@ -507,10 +571,67 @@ export function PromiseAction({
               setValues({});
               setTouched({});
               setSubmitted(false);
-              load();
+              refreshContractState();
             }}
           />
         </form>
+
+        {mode === "challenge" && lifecycleState?.reEvaluate ? (
+          <div className="pd-stack" style={{ marginTop: 20, gap: 14 }}>
+            <Notice tone="info" title="Challenge recorded on chain">
+              The contract is waiting for a fresh GenLayer evaluation using the newest challenge evidence.
+            </Notice>
+            <TransactionPanel
+              action="Re-evaluate result"
+              ctaLabel="Run fresh GenLayer evaluation"
+              disabled={!account}
+              disabledReason="Connect your wallet to run the new evaluation."
+              buildArgs={() => [id]}
+              onDone={() => refreshContractState(true)}
+            />
+          </div>
+        ) : null}
+
+        {freshVerdict?.delivery && freshVerdict.integrity ? (
+          <GlassSurface className="pd-glass__pad" style={{ marginTop: 20 }} data-testid="fresh-verdict">
+            <p className="pd-eyebrow">Fresh verdict from re-evaluation</p>
+            <div className="pd-row pd-wrap" style={{ gap: 10, marginTop: 10 }}>
+              <StatusChip value={freshVerdict.delivery} kind="delivery" />
+              <StatusChip value={freshVerdict.integrity} kind="integrity" />
+            </div>
+            {freshVerdict.explanation ? (
+              <p className="pd-muted" style={{ marginTop: 10 }}>{freshVerdict.explanation}</p>
+            ) : null}
+            <a className="pd-btn pd-btn--secondary pd-btn--sm" href={`/promises/${id}`} style={{ marginTop: 12 }}>
+              View promise record
+            </a>
+          </GlassSurface>
+        ) : null}
+
+        {lifecycleState?.finalize ? (
+          <div style={{ marginTop: 20 }}>
+            <TransactionPanel
+              action="Finalize result"
+              ctaLabel="Finalize this resolution"
+              disabled={!account || !chainStateReady}
+              disabledReason={!account ? "Connect your wallet to finalize the result." : "Reading the current contract state…"}
+              buildArgs={() => [id]}
+              onDone={() => refreshContractState(true)}
+            />
+          </div>
+        ) : null}
+
+        {promise?.isFinal ? (
+          <Notice tone="success" title="FINAL on chain">
+            The finalized contract result is shown above.
+          </Notice>
+        ) : null}
+
+        {refreshError ? (
+          <Notice tone="error" title="Transaction confirmed, but state refresh failed">
+            {refreshError}
+          </Notice>
+        ) : null}
       </div>
     </section>
   );

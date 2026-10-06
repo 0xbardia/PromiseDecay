@@ -213,7 +213,7 @@ async function cmdCertify(target) {
   };
 
   const cases = [
-    { method: "get_version", args: [], check: (v) => v === "1.0.0", expected: '"1.0.0"' },
+    { method: "get_version", args: [], check: (v) => v === "1.0.1", expected: '"1.0.1"' },
     { method: "get_promise_count", args: [], check: (v) => Number(v) >= 0, expected: "integer >= 0" },
     { method: "get_config", args: [], check: (v) => !!v && typeof v === "object" && !!v.contract_version, expected: "object" },
     { method: "get_all_promise_ids", args: [], check: (v) => Array.isArray(v), expected: "array" },

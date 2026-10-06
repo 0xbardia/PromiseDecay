@@ -66,7 +66,7 @@ const TRUST = [
   },
   {
     title: "Anyone can challenge",
-    body: "A provisional result stays open for a bounded window. A challenge must bring materially new evidence, is recorded forever, and triggers real re-evaluation.",
+    body: "A provisional result stays open for a bounded window. A challenge with materially new evidence is recorded forever, then a public action runs a fresh evaluation.",
   },
   {
     title: "You sign your own writes",

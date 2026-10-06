@@ -15,6 +15,7 @@ import {
   WrongNetworkError,
   explorerTxUrl,
   writeContract,
+  type TxProgress,
   type TxStage,
 } from "../lib/chain";
 
@@ -53,14 +54,10 @@ export function TransactionPanel({
     setMessage(STAGE_COPY["awaiting-wallet"]);
 
     try {
-      const res = await writeContract({
-        functionName: contractMethodFor(action),
-        args: buildArgs(),
-        onProgress: (p) => {
-          setStage(p.stage);
-          setHash(p.hash);
-          setMessage(p.message);
-        },
+      const res = await writeAction(action, buildArgs(), (p) => {
+        setStage(p.stage);
+        setHash(p.hash);
+        setMessage(p.message);
       });
       setSuccess(true);
       onDone?.(res.hash);
@@ -219,9 +216,23 @@ function contractMethodFor(action: string): string {
       return "submit_response";
     case "Challenge result":
       return "challenge";
+    case "Request resolution":
+      return "request_resolution";
+    case "Re-evaluate result":
+      return "re_evaluate";
+    case "Finalize result":
+      return "finalize";
     default:
       return "create_promise";
   }
 }
 
 export { contractMethodFor };
+
+export function writeAction(
+  action: string,
+  args: unknown[],
+  onProgress?: (progress: TxProgress) => void
+) {
+  return writeContract({ functionName: contractMethodFor(action), args, onProgress });
+}

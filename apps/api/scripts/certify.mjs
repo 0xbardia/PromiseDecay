@@ -212,8 +212,8 @@ const record = (method, input, expected, actual, ok) =>
   rows.push({ method, input, expected, actual, status: ok ? "PASS" : "FAIL" });
 
 // --- contract-level reads ---------------------------------------------------------------
-record("get_version", "—", '"1.0.0"', JSON.stringify(await read("get_version")),
-  (await read("get_version")) === "1.0.0");
+record("get_version", "—", '"1.0.1"', JSON.stringify(await read("get_version")),
+  (await read("get_version")) === "1.0.1");
 
 const cfg = await read("get_config");
 record("get_config", "—", "object with contract_version + enums",

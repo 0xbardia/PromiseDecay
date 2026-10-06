@@ -15,6 +15,7 @@ import {
   shortAddress,
 } from "@promisedecay/domain";
 import { DriftRail } from "../components/DriftRail";
+import { TransactionPanel } from "../components/TransactionPanel";
 import {
   EmptyState,
   GlassSurface,
@@ -26,7 +27,15 @@ import {
   integrityColor,
 } from "../components/primitives";
 import { ApiClientError, api, type ApiPromiseDetail } from "../lib/api";
-import { CONTRACT_ADDRESS, NETWORK_NAME } from "../lib/chain";
+import {
+  CONTRACT_ADDRESS,
+  NETWORK_NAME,
+  connect,
+  currentAccount,
+  getInjectedProvider,
+  readPromiseContractState,
+} from "../lib/chain";
+import { lifecycleActions } from "../lib/lifecycle";
 
 function formatDate(ts: number | null | undefined): string {
   if (!ts) return "—";
@@ -54,6 +63,11 @@ export function PromiseDetail({ params }: { params: Record<string, string> }) {
   const [state, setState] = useState<"loading" | "ready" | "error" | "missing">("loading");
   const [error, setError] = useState<string | null>(null);
   const [showProvenance, setShowProvenance] = useState(false);
+  const [account, setAccount] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [refreshingChain, setRefreshingChain] = useState(false);
+  const [chainRefreshError, setChainRefreshError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
   const load = useCallback(() => {
     if (!/^\d+$/.test(id)) {
@@ -77,6 +91,39 @@ export function PromiseDetail({ params }: { params: Record<string, string> }) {
   }, [id]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const provider = getInjectedProvider();
+    if (!provider) return;
+    void currentAccount(provider).then(setAccount).catch(() => undefined);
+    const onAccounts = (accounts: string[]) => setAccount(accounts[0] ?? null);
+    provider.on?.("accountsChanged", onAccounts as never);
+    return () => provider.removeListener?.("accountsChanged", onAccounts as never);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const onConnect = async () => {
+    setWalletError(null);
+    try {
+      const accounts = await connect();
+      setAccount(accounts[0] ?? null);
+    } catch (err) {
+      setWalletError((err as Error).message);
+    }
+  };
+
+  const refreshContractState = () => {
+    setRefreshingChain(true);
+    setChainRefreshError(null);
+    void readPromiseContractState(id)
+      .then((state) => setData((current) => (current ? { ...current, ...state } : current)))
+      .catch((err) => setChainRefreshError((err as Error).message || "Could not refresh contract state."))
+      .finally(() => setRefreshingChain(false));
+  };
 
   if (state === "missing") {
     return (
@@ -138,6 +185,18 @@ export function PromiseDetail({ params }: { params: Record<string, string> }) {
   const hasResolution = Boolean(delivery && integrity);
   const resolutionColor = delivery ? deliveryColor(delivery) : "var(--silver)";
   const isFinal = data.lifecycle === LIFECYCLE.FINAL;
+  const actions = lifecycleActions(data, now);
+  const hasLifecycleAction = Object.values(actions).some(Boolean);
+  const walletControl = account ? (
+    <p className="pd-hint">Connected as {account.slice(0, 6)}…{account.slice(-4)}.</p>
+  ) : (
+    <div>
+      <button type="button" className="pd-btn pd-btn--secondary" onClick={() => void onConnect()}>
+        Connect wallet
+      </button>
+      {walletError ? <p className="pd-error" role="alert">{walletError}</p> : null}
+    </div>
+  );
 
   return (
     <>
@@ -216,7 +275,11 @@ export function PromiseDetail({ params }: { params: Record<string, string> }) {
                 <div>
                   <p className="pd-eyebrow">GenLayer resolution</p>
                   <p className="pd-muted" style={{ fontSize: "0.88rem", marginTop: 6 }}>
-                    {isFinal ? "Final on chain" : "Provisional — open for challenge"} · decided{" "}
+                    {isFinal
+                      ? "Final on chain"
+                      : data.lifecycle === LIFECYCLE.RESOLVING
+                        ? "Challenge recorded — re-evaluation pending"
+                        : "Provisional — open for challenge"} · decided{" "}
                     {formatDateTime(data.decidedTs)}
                   </p>
                 </div>
@@ -257,13 +320,18 @@ export function PromiseDetail({ params }: { params: Record<string, string> }) {
               ) : null}
 
               <div className="pd-row pd-wrap" style={{ gap: 10, marginTop: 18 }}>
-                {!isFinal ? (
+                {actions.challenge ? (
                   <a
                     className="pd-btn pd-btn--secondary pd-btn--sm"
                     href={`/promises/${data.promiseId}/challenge`}
                     data-testid="challenge-cta"
                   >
                     Challenge this result
+                  </a>
+                ) : null}
+                {data.lifecycle === LIFECYCLE.RESOLVING && data.challengeCount > 0 ? (
+                  <a className="pd-btn pd-btn--secondary pd-btn--sm" href={`/promises/${data.promiseId}/challenge`}>
+                    Continue re-evaluation
                   </a>
                 ) : null}
                 <a className="pd-btn pd-btn--ghost pd-btn--sm" href="/docs/consensus">
@@ -282,12 +350,48 @@ export function PromiseDetail({ params }: { params: Record<string, string> }) {
                     result inside the challenge window.
                   </p>
                 </div>
-                <a className="pd-btn pd-btn--secondary" href={`/promises/${data.promiseId}/evidence`}>
-                  Add evidence
-                </a>
+                {actions.requestResolution ? (
+                  <TransactionPanel
+                    action="Request resolution"
+                    ctaLabel="Request a GenLayer resolution"
+                    disabled={!account}
+                    disabledReason="Connect your wallet to request the on-chain evaluation."
+                    buildArgs={() => [data.promiseId]}
+                    onDone={refreshContractState}
+                  >
+                    {walletControl}
+                  </TransactionPanel>
+                ) : (
+                  <a className="pd-btn pd-btn--secondary" href={`/promises/${data.promiseId}/evidence`}>
+                    Add evidence
+                  </a>
+                )}
               </div>
             </GlassSurface>
           )}
+          {actions.finalize ? (
+            <div style={{ marginTop: 16 }}>
+              <TransactionPanel
+                action="Finalize result"
+                ctaLabel="Finalize this resolution"
+                disabled={!account}
+                disabledReason="Connect your wallet to finalize the on-chain result."
+                buildArgs={() => [data.promiseId]}
+                onDone={refreshContractState}
+              >
+                {walletControl}
+              </TransactionPanel>
+            </div>
+          ) : null}
+          {refreshingChain ? <p className="pd-hint" role="status">Refreshing contract state…</p> : null}
+          {chainRefreshError ? (
+            <Notice tone="error" title="Transaction confirmed, but state refresh failed">
+              {chainRefreshError}
+            </Notice>
+          ) : null}
+          {hasLifecycleAction && !account ? (
+            <p className="pd-hint" style={{ marginTop: 10 }}>Your wallet signs lifecycle changes; the contract remains authoritative.</p>
+          ) : null}
         </div>
       </section>
 

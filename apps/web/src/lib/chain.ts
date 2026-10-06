@@ -10,6 +10,7 @@
  *                                  ↘ failed
  */
 import type { EIP1193Provider } from "viem";
+import type { ApiPromiseDetail } from "./api";
 
 /**
  * genlayer-js and viem are loaded on demand.
@@ -316,6 +317,84 @@ export async function writeContract(opts: WriteOptions): Promise<{ hash: string;
   }
   report({ stage: "final", hash, message: STAGE_COPY.final });
   return { hash, state };
+}
+
+/** Read the full current promise state after a confirmed write, bypassing indexer lag. */
+export async function readPromiseContractState(id: string): Promise<Partial<ApiPromiseDetail>> {
+  if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
+  const { createClient, chains } = await loadGenlayer();
+  const client = createClient({ chain: chainDescriptor(chains as never), endpoint: RPC_URL });
+  const read = async <T,>(functionName: string, args: unknown[] = []): Promise<T> =>
+    (await client.readContract({
+      address: CONTRACT_ADDRESS as `0x${string}`,
+      functionName,
+      args: args as never,
+    })) as unknown as T;
+  const parse = <T,>(raw: unknown): T =>
+    (typeof raw === "string" ? JSON.parse(raw) : raw) as T;
+
+  const lifecycle = await read<string>("get_lifecycle_status", [id]);
+  const hasResult = ["RESOLVING", "PROVISIONAL", "CHALLENGE_WINDOW", "FINAL"].includes(lifecycle);
+  const [evidenceRaw, driftRaw, responsesRaw, challengesRaw, window] = await Promise.all([
+    read<string | unknown[]>("get_evidence", [id]),
+    read<string | unknown[]>("get_drift", [id]),
+    read<string | unknown[]>("get_responses", [id]),
+    read<string | unknown[]>("get_challenges", [id]),
+    read<{ challenge_closes_at: string }>("get_challenge_window", [id]),
+  ]);
+  const result = hasResult
+    ? await read<Record<string, unknown>>(
+        lifecycle === "FINAL" ? "get_final_result" : "get_provisional_result",
+        [id]
+      )
+    : null;
+  const evidence = parse<Array<Record<string, unknown>>>(evidenceRaw);
+  const drift = parse<Array<Record<string, unknown>>>(driftRaw);
+  const responses = parse<Array<Record<string, unknown>>>(responsesRaw);
+  const challenges = parse<Array<Record<string, unknown>>>(challengesRaw);
+
+  return {
+    lifecycle,
+    delivery: (result?.delivery as ApiPromiseDetail["delivery"]) ?? null,
+    integrity: (result?.integrity as ApiPromiseDetail["integrity"]) ?? null,
+    deadlineMet: (result?.deadline_met as boolean | undefined) ?? null,
+    materialScopeChange: (result?.material_scope_change as boolean | undefined) ?? null,
+    explanation: (result?.explanation as string | undefined) ?? null,
+    decidedTs: result ? Number(result.decided_ts) : null,
+    isFinal: lifecycle === "FINAL",
+    challengeCount: challenges.length,
+    evidenceCount: evidence.length,
+    driftCount: drift.length,
+    responseCount: responses.length,
+    challengeClosesAt: Number(window.challenge_closes_at) || null,
+    evidence: evidence.map((item) => ({
+      submitter: String(item.submitter),
+      sourceUrl: String(item.source_url),
+      quote: String(item.quote),
+      kind: String(item.kind),
+      submittedTs: Number(item.submitted_ts),
+    })),
+    drift: drift.map((item) => ({
+      submitter: String(item.submitter),
+      statement: String(item.statement),
+      sourceUrl: String(item.source_url),
+      submittedTs: Number(item.submitted_ts),
+      relationship: String(item.relationship),
+    })),
+    responses: responses.map((item) => ({
+      submitter: String(item.submitter),
+      statement: String(item.statement),
+      sourceUrl: String(item.source_url),
+      submittedTs: Number(item.submitted_ts),
+      verified: Boolean(item.verified),
+    })),
+    challenges: challenges.map((item) => ({
+      challenger: String(item.challenger),
+      reason: String(item.reason),
+      evidenceUrl: String(item.evidence_url),
+      submittedTs: Number(item.submitted_ts),
+    })),
+  };
 }
 
 function stageFor(state: string): TxStage {
