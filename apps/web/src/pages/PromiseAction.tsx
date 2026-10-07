@@ -14,6 +14,7 @@ import { connect, currentChainId, readPromiseContractState } from "../lib/chain"
 import { lifecycleActions } from "../lib/lifecycle";
 
 type Mode = "evidence" | "update" | "respond" | "challenge";
+const NETWORK_UNAVAILABLE = "Network data is temporarily unavailable. Please retry shortly.";
 
 const MODE_CONFIG: Record<
   Mode,
@@ -200,6 +201,7 @@ export function PromiseAction({
 
   const load = useCallback(() => {
     if (!/^\d+$/.test(id)) return;
+    setRefreshError(null);
     api
       .getPromise(id)
       .then((detail) => {
@@ -210,10 +212,9 @@ export function PromiseAction({
             .then((state) => {
               setPromise({ ...detail, ...state });
               setChainStateReady(true);
+              setRefreshError(null);
             })
-            .catch((err) => {
-              setRefreshError((err as Error).message || "Could not read current contract state.");
-            });
+            .catch(() => setRefreshError(NETWORK_UNAVAILABLE));
         }
       })
       .catch(() => setPromise(null));
@@ -233,6 +234,7 @@ export function PromiseAction({
       .then((state) => {
         setPromise((current) => (current ? { ...current, ...state } : current));
         setChainStateReady(true);
+        setRefreshError(null);
         if (showFreshVerdict) {
           setFreshVerdict({
             delivery: state.delivery ?? null,
@@ -241,7 +243,7 @@ export function PromiseAction({
           });
         }
       })
-      .catch((err) => setRefreshError((err as Error).message || "Could not refresh contract state."));
+      .catch(() => setRefreshError(NETWORK_UNAVAILABLE));
   };
 
   const errors = useMemo(() => {
@@ -370,6 +372,27 @@ export function PromiseAction({
           </p>
         </header>
 
+        {mode === "challenge" && !chainStateReady ? (
+          <Notice
+            tone={refreshError ? "error" : "info"}
+            title={refreshError ?? "Checking current contract state…"}
+            action={refreshError ? (
+              <button
+                type="button"
+                className="pd-btn pd-btn--secondary pd-btn--sm"
+                onClick={() => refreshContractState()}
+                data-testid="retry-contract-read"
+              >
+                Retry live read
+              </button>
+            ) : undefined}
+          >
+            {refreshError
+              ? "The record context below comes from indexed data and may be stale. Actions requiring a live contract read remain disabled until a retry succeeds."
+              : "Actions requiring a live contract read remain disabled until it succeeds."}
+          </Notice>
+        ) : null}
+
         {/* Context: what you are acting on, and its current state. */}
         {promise ? (
           <GlassSurface tone="flat" className="pd-glass__pad" style={{ padding: 18, marginBottom: 20 }}>
@@ -403,7 +426,7 @@ export function PromiseAction({
           {config.note}
         </Notice>
 
-        {mode === "challenge" && promise?.isFinal ? (
+        {mode === "challenge" && chainStateReady && promise?.isFinal ? (
           <div style={{ marginTop: 16 }}>
             <Notice tone="warn" title="This promise is already final">
               A final resolution cannot be challenged. The challenge window has closed.
@@ -411,7 +434,7 @@ export function PromiseAction({
           </div>
         ) : null}
 
-        {mode === "challenge" && promise && !promise.isFinal && !lifecycleState?.challenge && !lifecycleState?.reEvaluate ? (
+        {mode === "challenge" && chainStateReady && promise && !promise.isFinal && !lifecycleState?.challenge && !lifecycleState?.reEvaluate ? (
           <div style={{ marginTop: 16 }}>
             <Notice tone="warn" title="A challenge cannot be submitted in this state">
               {promise.lifecycle === "CHALLENGE_WINDOW" &&
@@ -554,12 +577,14 @@ export function PromiseAction({
               (mode === "challenge" && lifecycleState?.challenge !== true)
             }
             disabledReason={
-              promise?.isFinal === true && mode === "challenge"
-                ? "This promise is already final."
-                : mode === "challenge" && lifecycleState?.challenge !== true
+              mode === "challenge" && !chainStateReady
+                  ? refreshError
+                    ? "Retry the live contract read before submitting."
+                    : "Waiting for current on-chain state."
+                : promise?.isFinal === true && mode === "challenge"
+                  ? "This promise is already final."
+                  : mode === "challenge" && lifecycleState?.challenge !== true
                   ? "A challenge is only available in an open challenge window."
-                  : mode === "challenge" && !chainStateReady
-                    ? "Reading the current on-chain challenge state…"
                   : ((mode === "evidence" || mode === "update") && promise?.isFinal === true)
                     ? "Evidence and drift are closed after finalization."
                 : !valid
@@ -576,7 +601,7 @@ export function PromiseAction({
           />
         </form>
 
-        {mode === "challenge" && lifecycleState?.reEvaluate ? (
+        {mode === "challenge" && chainStateReady && lifecycleState?.reEvaluate ? (
           <div className="pd-stack" style={{ marginTop: 20, gap: 14 }}>
             <Notice tone="info" title="Challenge recorded on chain">
               The contract is waiting for a fresh GenLayer evaluation using the newest challenge evidence.
@@ -584,15 +609,15 @@ export function PromiseAction({
             <TransactionPanel
               action="Re-evaluate result"
               ctaLabel="Run fresh GenLayer evaluation"
-              disabled={!account}
-              disabledReason="Connect your wallet to run the new evaluation."
+              disabled={!account || !chainStateReady}
+              disabledReason={!account ? "Connect your wallet to run the new evaluation." : "Read the current contract state before re-evaluating."}
               buildArgs={() => [id]}
               onDone={() => refreshContractState(true)}
             />
           </div>
         ) : null}
 
-        {freshVerdict?.delivery && freshVerdict.integrity ? (
+        {chainStateReady && freshVerdict?.delivery && freshVerdict.integrity ? (
           <GlassSurface className="pd-glass__pad" style={{ marginTop: 20 }} data-testid="fresh-verdict">
             <p className="pd-eyebrow">Fresh verdict from re-evaluation</p>
             <div className="pd-row pd-wrap" style={{ gap: 10, marginTop: 10 }}>
@@ -608,7 +633,7 @@ export function PromiseAction({
           </GlassSurface>
         ) : null}
 
-        {lifecycleState?.finalize ? (
+        {chainStateReady && lifecycleState?.finalize ? (
           <div style={{ marginTop: 20 }}>
             <TransactionPanel
               action="Finalize result"
@@ -621,17 +646,12 @@ export function PromiseAction({
           </div>
         ) : null}
 
-        {promise?.isFinal ? (
+        {chainStateReady && promise?.isFinal ? (
           <Notice tone="success" title="FINAL on chain">
             The finalized contract result is shown above.
           </Notice>
         ) : null}
 
-        {refreshError ? (
-          <Notice tone="error" title="Transaction confirmed, but state refresh failed">
-            {refreshError}
-          </Notice>
-        ) : null}
       </div>
     </section>
   );

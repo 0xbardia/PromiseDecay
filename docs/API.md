@@ -1,6 +1,7 @@
 # PromiseDecay — API
 
-Base URL in production: `https://promisedecay.bydx.fun/api/v1`
+Base URL in production: `https://promisedecay.bydx.fun/api/v1`. Health routes are served at the
+site root: `https://promisedecay.bydx.fun/health/live` and `/health/ready`.
 
 The API is **read-only**. It exposes `GET` and `HEAD` only — there is no server-side write
 path, because every write is signed by the user's own wallet.
@@ -85,7 +86,7 @@ evidence, drift, responses and challenges.
   "sourceUrl": "https://en.wikipedia.org/wiki/Mainnet",
   "creator": "0x7EB56204F7FfDd8f376CE75726e0A26ef8c9f8DA",
   "createdTs": 1791074391,
-  "contractVersion": "1.0.0",
+  "contractVersion": "1.0.1",
   "lifecycle": "CHALLENGE_WINDOW",
   "delivery": "UNRESOLVED",
   "integrity": "UNKNOWN",

@@ -515,9 +515,9 @@ GET  /api/v1/config   contract address, network, chain id` },
         heading: "Production shape",
         blocks: [
           { kind: "code", text: `promisedecay-web      127.0.0.1:4180   PM2
-promisedecay-api      127.0.0.1:4181   PM2
+promisedecay-api      127.0.0.1:4182   PM2
 promisedecay-indexer  no listener      PM2 worker
-nginx                 :443 TLS         terminates, proxies /api to the API` },
+nginx                 :443 TLS         terminates, proxies /api and health routes to the API` },
           {
             kind: "p",
             text: "Internal services bind to loopback. Only nginx is public. API responses are never cached; hashed build assets are cached immutably.",
@@ -535,7 +535,9 @@ nginx                 :443 TLS         terminates, proxies /api to the API` },
               ["Chain ID", "61999"],
               ["RPC", "https://studio.genlayer.com/api"],
               ["Contract", "0x742210deAab5d1A45F68675b1Ed0be2f621671c5"],
+              ["Release", "v1.0.1"],
               ["Contract version", "1.0.1"],
+              ["Challenge window", "7 days (604,800 seconds)"],
               ["Legacy V1 contract (superseded)", "0x6B340D9C6230b31652aAbDC08acDAd763635A82b"],
             ],
           },
@@ -560,7 +562,9 @@ GENLAYER_RPC_URL
 GENLAYER_CHAIN_ID
 GENLAYER_NETWORK
 GENLAYER_CONTRACT_ADDRESS
-INDEXER_INTERVAL_MS
+INDEXER_ENABLED
+INDEXER_DAILY_REQUEST_BUDGET
+INDEXER_MIN_INTERVAL_MS
 API_PORT
 API_HOST
 WEB_ORIGIN

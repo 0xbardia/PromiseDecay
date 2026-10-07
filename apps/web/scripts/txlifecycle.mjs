@@ -38,7 +38,7 @@ const pad = (a) => `0x${a.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
 const NEW_TX_TOPICS = [
   NEW_TX_SIG,
   TX_ID,
-  pad("0x6B340D9C6230b31652aAbDC08acDAd763635A82b"),
+  pad("0x742210deAab5d1A45F68675b1Ed0be2f621671c5"),
   pad("0x1111111111111111111111111111111111111111"),
 ];
 const NEW_TX_LOG = {
@@ -91,7 +91,7 @@ function stubChainStates(page, states, delayMs = 0) {
         blockHash: "0x" + "ab".repeat(32),
         blockNumber: "0x1",
         from: "0x1111111111111111111111111111111111111111",
-        to: "0x6B340D9C6230b31652aAbDC08acDAd763635A82b",
+        to: "0x742210deAab5d1A45F68675b1Ed0be2f621671c5",
         cumulativeGasUsed: "0x7a120",
         gasUsed: "0x7a120",
         status: "0x1",
@@ -103,7 +103,7 @@ function stubChainStates(page, states, delayMs = 0) {
       return ok({
         hash: HASH,
         from: "0x1111111111111111111111111111111111111111",
-        to: "0x6B340D9C6230b31652aAbDC08acDAd763635A82b",
+        to: "0x742210deAab5d1A45F68675b1Ed0be2f621671c5",
         input: "0x",
         value: "0x0",
         nonce: "0x0",

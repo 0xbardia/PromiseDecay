@@ -5,6 +5,7 @@
 | Setting | Value |
 |---|---|
 | URL | `https://promisedecay.bydx.fun` |
+| Release | `v1.0.1` |
 | Network | GenLayer Studionet |
 | Chain ID | `61999` |
 | RPC | `https://studio.genlayer.com/api` |
@@ -43,7 +44,7 @@ address is never reported for an obsolete deployment.
 promisedecay-web      127.0.0.1:4180   PM2
 promisedecay-api      127.0.0.1:4182   PM2
 promisedecay-indexer  no listener      PM2 worker
-nginx                 :443             TLS terminator
+nginx                 :443             TLS terminator; proxies `/api/` and API health routes
 ```
 
 Internal services bind to loopback. Only nginx is public.
@@ -63,7 +64,9 @@ Internal services bind to loopback. Only nginx is public.
 | `GENLAYER_NETWORK` | **yes** | — | `studionet` \| `testnet-bradbury` \| `localnet` |
 | `GENLAYER_CONTRACT_ADDRESS` | yes for indexer | — | 20-byte hex address |
 | `GENLAYER_EXPLORER_API` | no | Studio explorer | Used by deployment tooling |
-| `INDEXER_INTERVAL_MS` | no | `15000` | Pass interval |
+| `INDEXER_ENABLED` | no | `true` | Enable the indexer worker |
+| `INDEXER_DAILY_REQUEST_BUDGET` | no | `2500` | Daily GenLayer request budget |
+| `INDEXER_MIN_INTERVAL_MS` | no | `600000` | Minimum delay between sync passes |
 | `LOG_LEVEL` | no | `info` | Pino level |
 | `RATE_LIMIT_WINDOW_MS` | no | `60000` | Rate limit window |
 | `RATE_LIMIT_MAX` | no | `300` | Requests per window per IP |
@@ -134,7 +137,8 @@ pm2 start apps/indexer/dist/worker.js --name promisedecay-indexer
 pm2 save
 ```
 
-nginx proxies `/` to `127.0.0.1:4180` and `/api` to `127.0.0.1:4182`, with:
+nginx proxies `/` to `127.0.0.1:4180`, `/api` and `/health/live` plus `/health/ready` to
+`127.0.0.1:4182`, with:
 
 - HTTP → HTTPS redirect
 - TLS from Let's Encrypt
@@ -204,8 +208,8 @@ the real signal (`code -32029`, plus `bucket`/`window`/`limit`/`retry_after_seco
 `cause.data`. Any tooling you write against this endpoint must detect that structure, not the
 message text — matching on the string "rate limit" silently never fires.
 
-Expect a full sync of the current dataset to take roughly 3–4 minutes wall-clock. `INDEXER_INTERVAL_MS`
-is the floor between passes, not a freshness guarantee.
+Expect a full sync of the current dataset to take roughly 3–4 minutes wall-clock.
+`INDEXER_MIN_INTERVAL_MS` is the floor between passes, not a freshness guarantee.
 
 ### Port selection
 

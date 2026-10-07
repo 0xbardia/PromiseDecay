@@ -33,6 +33,7 @@ const RPC_URL =
   "https://studio.genlayer.com/api";
 
 const CHAIN_ID = Number(import.meta.env.VITE_GENLAYER_CHAIN_ID ?? 61999);
+const CONTRACT_READ_TIMEOUT_MS = 15_000;
 
 const NETWORK_NAME =
   (import.meta.env.VITE_GENLAYER_NETWORK as string | undefined) ?? "studionet";
@@ -425,7 +426,7 @@ export async function writeContract(opts: WriteOptions): Promise<{ hash: string;
 }
 
 /** Read the full current promise state after a confirmed write, bypassing indexer lag. */
-export async function readPromiseContractState(id: string): Promise<Partial<ApiPromiseDetail>> {
+async function readPromiseContractStateNow(id: string): Promise<Partial<ApiPromiseDetail>> {
   if (!CONTRACT_ADDRESS) throw new Error("Contract address is not configured.");
   const { createClient, chains } = await loadGenlayer();
   const client = createClient({ chain: chainDescriptor(chains as never), endpoint: RPC_URL });
@@ -501,6 +502,22 @@ export async function readPromiseContractState(id: string): Promise<Partial<ApiP
       submittedTs: Number(item.submitted_ts),
     })),
   };
+}
+
+/** Bound live reads so a stalled RPC ends in a recoverable UI state. */
+export function readPromiseContractState(id: string): Promise<Partial<ApiPromiseDetail>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    readPromiseContractStateNow(id),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("GenLayer contract read timed out.")),
+        CONTRACT_READ_TIMEOUT_MS
+      );
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 function stageFor(state: string): TxStage {

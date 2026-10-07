@@ -4,7 +4,7 @@
 
 ### Promises deserve a memory.
 
-**Live:** [promisedecay.bydx.fun](https://promisedecay.bydx.fun) · **Docs:** [/docs](https://promisedecay.bydx.fun/docs)
+**Release:** [v1.0.1](https://github.com/0xbardia/PromiseDecay/releases/tag/v1.0.1) · **Live:** [promisedecay.bydx.fun](https://promisedecay.bydx.fun) · **Docs:** [/docs](https://promisedecay.bydx.fun/docs)
 
 *Said. Tracked. Resolved.*
 
@@ -41,10 +41,10 @@ Delivery and integrity are two independent axes, never a single score:
 > → `PARTIAL` delivery, `NARROWED` integrity
 
 That arrow is an illustration of the shape of a finding, **not a verdict from the deployed
-contract**. The public records currently on Studionet all resolve `UNRESOLVED` / `UNKNOWN` —
-their evidence genuinely does not establish what happened, and the contract refuses to invent an
-answer it cannot support. The example above is what a *supported* finding looks like when the
-evidence actually shows it.
+contract**. The current public records include clearly labelled synthetic certification fixtures.
+One has a provisional `KEPT` / `UNCHANGED` finding inside the real 7-day challenge window; it is
+not a claim about a real project or a final production verdict. See
+[the live certification record](docs/LIVE_CERTIFICATION.md).
 
 There is deliberately **no reputation score, no vote, no token, no staking and no ranking**. Users
 supply evidence; validators reach semantic consensus; the record stays inspectable.
