@@ -38,10 +38,19 @@ report.apiContract = apiCfg.contractAddress;
 if (apiCfg.contractAddress.toLowerCase() !== address.toLowerCase()) throw new Error(`API serves ${apiCfg.contractAddress}, expected ${address}`);
 
 // --- fixture ---------------------------------------------------------------------------------
-const runId = `p${Date.now().toString(36)}`;
+// RESUME_PID continues a run that was already seeded and indexed (for example after a harness
+// fault), instead of creating another record on the production contract.
+const RESUME = process.env.RESUME_PID ? BigInt(process.env.RESUME_PID) : null;
 const nowTs = Math.floor(Date.now() / 1000);
-const deadlineTs = nowTs + 420;
+let runId = `p${Date.now().toString(36)}`;
+let deadlineTs = nowTs + 420;
+if (RESUME) {
+  const dna = await c.read("get_promise", [RESUME]);
+  runId = String(dna.source_url).split("/fixtures/")[1].split("/")[0];
+  deadlineTs = Number(dna.deadline_ts);
+}
 const fx = fixture(runId, nowTs, deadlineTs);
+// Idempotent: page text is a pure function of the run id and deadline, and a web rebuild clears dist.
 writePages(fx, new URL("../dist", import.meta.url).pathname);
 await assertPagesServed(fx);
 report.runId = runId;
@@ -69,16 +78,27 @@ async function seed(method, pid, args) {
   report.steps.push({ phase: "seed", method, hash, status });
 }
 
-const idsBefore = (await c.read("get_all_promise_ids")).map(Number);
-await seed("create_promise", null, fx.promise);
-const ids = (await c.read("get_all_promise_ids")).map(Number);
-const pid = BigInt(ids.filter((i) => !idsBefore.includes(i)).pop());
-report.promiseId = String(pid);
-log(`production fixture promise id ${pid}`);
-for (const [u, q, k] of fx.evidence) await seed("add_evidence", pid, [pid, u, q, k]);
-for (const [s, u] of fx.drift) await seed("add_drift", pid, [pid, s, u]);
-report.driftRelations = JSON.parse(await c.read("get_drift", [pid])).map((d) => ({ page: d.source_url.split("/").pop(), relationship: d.relationship }));
-log("drift relations", jsonSafe(report.driftRelations));
+let pid;
+if (RESUME) {
+  pid = RESUME;
+  report.promiseId = String(pid);
+  report.resumed = true;
+  report.driftRelations = JSON.parse(await c.read("get_drift", [pid])).map((d) => ({ page: d.source_url.split("/").pop(), relationship: d.relationship }));
+  log(`resuming on production fixture promise id ${pid} (run ${runId})`, jsonSafe(report.driftRelations));
+} else {
+  const idsBefore = (await c.read("get_all_promise_ids")).map(Number);
+  await seed("create_promise", null, fx.promise);
+  const ids = (await c.read("get_all_promise_ids")).map(Number);
+  pid = BigInt(ids.filter((i) => !idsBefore.includes(i)).pop());
+  report.promiseId = String(pid);
+  log(`production fixture promise id ${pid}`);
+  for (const [u, q, k] of fx.evidence) await seed("add_evidence", pid, [pid, u, q, k]);
+  for (const [s, u] of fx.drift) await seed("add_drift", pid, [pid, s, u]);
+  report.driftRelations = JSON.parse(await c.read("get_drift", [pid])).map((d) => ({ page: d.source_url.split("/").pop(), relationship: d.relationship }));
+  log("drift relations", jsonSafe(report.driftRelations));
+
+
+}
 
 // One indexer pass so the public API/UI can show the new record, then back to rest.
 function indexerPass() {
@@ -105,8 +125,11 @@ function envFromDotenv() {
 }
 const stopIndexer = () => execFileSync("/root/.nvm/versions/node/v20.20.2/bin/pm2", ["stop", "promisedecay-indexer"], { stdio: "ignore" });
 
-log("indexer:", (await indexerPass()).slice(0, 200));
-stopIndexer();
+// Always: a resumed run starts from chain state the indexer has not seen yet.
+if (process.env.SKIP_INDEXER !== "1") {
+  log("indexer:", (await indexerPass()).slice(0, 200));
+  stopIndexer();
+}
 const listed = await (await fetch(`${BASE}/api/v1/promises?limit=10`)).json();
 if (!listed.items.some((i) => i.promiseId === String(pid))) throw new Error("promise is not visible in the public API after the indexer pass");
 
@@ -117,6 +140,22 @@ const signed = [];
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+// The Studio endpoint caps requests per IP per hour, and this host's IP is shared. A real user's
+// browser has its own budget; this one does not. When Studio answers with its rate-limit error,
+// re-issue the identical request after a pause so the app sees the answer it would have got.
+// Nothing about the request or the signed transaction is altered, and retries are counted.
+report.browser.rateLimitRetries = 0;
+await context.route("https://studio.genlayer.com/api", async (route) => {
+  if (route.request().method() !== "POST") return route.continue();
+  for (let i = 0; i < 10; i++) {
+    const resp = await route.fetch();
+    const body = await resp.text().catch(() => "");
+    if (resp.status() !== 429 && !/Rate limit exceeded/.test(body)) return route.fulfill({ response: resp, body });
+    report.browser.rateLimitRetries++;
+    await sleep(20_000);
+  }
+  return route.continue();
+});
 await context.exposeFunction("__pdSign", async (tx) => {
   const big = (h) => (h === undefined || h === null ? undefined : BigInt(h));
   const raw = await signer.signTransaction({
@@ -180,7 +219,18 @@ async function appWrite(label, submitLocator) {
   await submitLocator.click();
   await page.waitForSelector('[data-testid="tx-status"]', { timeout: 60_000 });
   // Confirmed chip means the panel itself reached FINALIZED, not a local assumption.
-  await txBox().locator("text=Confirmed").waitFor({ timeout: 12 * 60_000 });
+  const panel = txBox();
+  await page.waitForFunction(() => {
+    const boxes = document.querySelectorAll('[data-testid="tx-status"]');
+    const last = boxes[boxes.length - 1];
+    return last && (last.getAttribute("data-stage") === "failed" || /Confirmed/.test(last.textContent || ""));
+  }, null, { timeout: 12 * 60_000, polling: 2000 });
+  if ((await panel.getAttribute("data-stage")) === "failed") {
+    const said = (await panel.locator('[data-testid="tx-message"]').innerText()).trim();
+    const shown = await panel.locator("a.pd-tx__hash").first().innerText().catch(() => "");
+    await page.screenshot({ path: outFile.replace(/\.json$/, `-failed-${label}.png`) });
+    throw new Error(`the app's ${label} panel failed: "${said}" (hash ${shown.trim() || "none"})`);
+  }
   const t1 = Date.now();
   const hash = (await txBox().locator("a.pd-tx__hash").first().innerText()).replace(/\s*↗\s*$/, "").trim();
   const status = await rpc("gen_getTransactionStatus", [hash]);
@@ -191,11 +241,14 @@ async function appWrite(label, submitLocator) {
   return rec;
 }
 
+// The provider answers eth_accounts, so the app may already be connected on load; connect
+// explicitly only when it is not. Either way the app must show the wallet address.
 const connect = async () => {
+  const connected = page.locator("text=/Connected as 0x/").first();
   const btn = page.getByRole("button", { name: "Connect wallet" }).first();
-  await btn.waitFor({ timeout: 30_000 });
-  await btn.click();
-  await page.locator("text=/Connected as 0x/").first().waitFor({ timeout: 15_000 });
+  await Promise.race([connected.waitFor({ timeout: 30_000 }), btn.waitFor({ timeout: 30_000 })]);
+  if (!(await connected.isVisible())) await btn.click();
+  await connected.waitFor({ timeout: 15_000 });
 };
 
 // Wait for the deadline to pass on chain time.
@@ -203,27 +256,48 @@ const wait = deadlineTs + 20 - Math.floor(Date.now() / 1000);
 if (wait > 0) { log(`waiting ${wait}s for the deadline`); await sleep(wait * 1000); }
 
 // 1. request_resolution ------------------------------------------------------------------------
-await page.goto(`${BASE}/promises/${pid}`, { waitUntil: "networkidle" });
+await page.goto(`${BASE}/promises/${pid}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
 await page.waitForSelector('[data-testid="detail-project"]', { timeout: 60_000 });
 await connect();
-const requestCta = page.getByRole("button", { name: "Request a GenLayer resolution" });
-await requestCta.waitFor({ timeout: 30_000 });
-const rr = await appWrite("request_resolution", requestCta);
-await page.waitForSelector('[data-testid="verdict-delivery"]', { timeout: 60_000 });
-rr.ui = { delivery: await page.locator('[data-testid="verdict-delivery"]').innerText(), integrity: await page.locator('[data-testid="verdict-integrity"]').innerText() };
-await page.screenshot({ path: outFile.replace(/\.json$/, "-1-provisional.png"), fullPage: false });
-if (rr.after.lifecycle !== "CHALLENGE_WINDOW" || !rr.after.provisional) throw new Error("request_resolution did not produce a provisional result");
-if (rr.ui.delivery.trim() !== rr.after.provisional.delivery) throw new Error(`UI shows ${rr.ui.delivery}, chain has ${rr.after.provisional.delivery}`);
+const state0 = await snap(pid);
+let rr;
+if (["OPEN", "DUE"].includes(state0.lifecycle)) {
+  const requestCta = page.getByRole("button", { name: "Request a GenLayer resolution" });
+  await requestCta.waitFor({ timeout: 30_000 });
+  rr = await appWrite("request_resolution", requestCta);
+  await page.waitForSelector('[data-testid="verdict-delivery"]', { timeout: 60_000 });
+  rr.ui = { delivery: await page.locator('[data-testid="verdict-delivery"]').innerText(), integrity: await page.locator('[data-testid="verdict-integrity"]').innerText() };
+  await page.screenshot({ path: outFile.replace(/\.json$/, "-1-provisional.png"), fullPage: false });
+  if (rr.after.lifecycle !== "CHALLENGE_WINDOW" || !rr.after.provisional) throw new Error("request_resolution did not produce a provisional result");
+  if (rr.ui.delivery.trim() !== rr.after.provisional.delivery) throw new Error(`UI shows ${rr.ui.delivery}, chain has ${rr.after.provisional.delivery}`);
+} else {
+  // Resumed after the app already sent request_resolution (RR_HASH). The chain is the authority.
+  const decided = Number(state0.provisional?.decided_ts);
+  rr = { phase: "ui", method: "request_resolution", promiseId: String(pid), hash: process.env.RR_HASH ?? null, resumed: true, status: process.env.RR_HASH ? await rpc("gen_getTransactionStatus", [process.env.RR_HASH]) : null, before: null, after: state0, t0: (decided - 400) * 1000, t1: (decided + 30) * 1000 };
+  report.steps.push(rr);
+  log(`  request_resolution (already on chain): ${rr.status} ${rr.hash}`, jsonSafe(state0));
+}
 
 // 2. challenge ---------------------------------------------------------------------------------
-await page.locator('[data-testid="challenge-cta"]').click();
+if (rr.resumed) {
+  // The detail page shows the indexer's snapshot, which can lag a write made in an earlier run.
+  // The challenge page overlays live contract state, so go there directly.
+  await page.goto(`${BASE}/promises/${pid}/challenge`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+} else {
+  await page.locator('[data-testid="challenge-cta"]').click();
+}
 await page.waitForSelector('[data-testid="field-reason"]', { timeout: 30_000 });
-await page.locator('[data-testid="action-connect"]').click();
-await page.locator("text=/Connected as 0x/").first().waitFor({ timeout: 15_000 });
+await connect();
 await page.locator('[data-testid="field-reason"]').fill(fx.challenge[0]);
 await page.locator('[data-testid="field-sourceUrl"]').fill(fx.challenge[1]);
 const challengeBtn = page.locator('[data-testid="tx-submit"]').first();
-await page.waitForFunction(() => { const b = document.querySelector('[data-testid="tx-submit"]'); return b && !b.disabled; }, null, { timeout: 60_000 });
+try {
+  await page.waitForFunction(() => { const b = document.querySelector('[data-testid="tx-submit"]'); return b && !b.disabled; }, null, { timeout: 5 * 60_000 });
+} catch (e) {
+  const shown = await page.evaluate(() => [...document.querySelectorAll('.pd-hint, [role="alert"], [role="status"], .pd-notice')].map((n) => n.textContent.trim()).filter(Boolean).slice(0, 8));
+  await page.screenshot({ path: outFile.replace(/\.json$/, "-challenge-disabled.png") });
+  throw new Error(`challenge submit never enabled; page shows: ${JSON.stringify(shown)}`);
+}
 const ch = await appWrite("challenge", challengeBtn);
 if (ch.after.lifecycle !== "RESOLVING" || ch.after.challengeCount !== 1) throw new Error("challenge was not stored on chain");
 
@@ -245,10 +319,16 @@ report.fetches = {
 };
 report.fetchRows = rows;
 
-log("indexer:", (await indexerPass()).slice(0, 200));
-stopIndexer();
-await page.goto(`${BASE}/promises/${pid}`, { waitUntil: "networkidle" });
-await page.reload({ waitUntil: "networkidle" });
+for (let attempt = 1; attempt <= 4; attempt++) {
+  log(`indexer pass ${attempt}:`, (await indexerPass()).slice(0, 160));
+  stopIndexer();
+  const api = await (await fetch(`${BASE}/api/v1/promises/${pid}`)).json();
+  const chainNow = await snap(pid);
+  if (api.lifecycle === chainNow.lifecycle && api.delivery === chainNow.provisional?.delivery) break;
+  log("  API still lags the chain; trying another pass");
+}
+await page.goto(`${BASE}/promises/${pid}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });
 await page.waitForSelector('[data-testid="verdict-delivery"]', { timeout: 60_000 });
 const finalChain = await snap(pid);
 report.refresh = {

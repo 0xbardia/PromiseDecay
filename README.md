@@ -216,9 +216,9 @@ connection failure rather than an honest absence.
 ```bash
 pnpm -r typecheck                       # all packages
 pnpm --filter @promisedecay/api test    # 44 backend tests
-pnpm --filter @promisedecay/web test    # 47 frontend + security tests
+pnpm --filter @promisedecay/web test    # 74 frontend + security tests
 
-.venv/bin/pytest tests/contract         # 146 Direct Mode contract tests
+.venv/bin/pytest tests/contract         # 217 Direct Mode contract tests
 ```
 
 Browser coverage runs against the **real deployed domain**, not localhost:

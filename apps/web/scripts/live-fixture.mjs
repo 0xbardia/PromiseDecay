@@ -32,15 +32,20 @@ export function loadAccount() {
   return { account: createAccount(privateKey), privateKey };
 }
 
-/** Retry only on the Studio per-IP request cap, which is a shared, rolling budget. */
+/**
+ * Retry only on transient transport conditions: the Studio per-IP request cap (a shared,
+ * rolling budget) and gateway/network blips, which arrive as HTML error pages or dropped
+ * connections rather than JSON-RPC errors. Contract-level failures are never retried.
+ */
+const TRANSIENT = /rate limit|<!DOCTYPE|is not valid JSON|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|\b50[234]\b|bad gateway|gateway time-?out|service unavailable/i;
 export async function withRateLimitRetry(label, fn, attempts = 12) {
   for (let i = 1; ; i++) {
     try {
       return await fn();
     } catch (e) {
       const msg = String(e?.message ?? e);
-      if (!/rate limit/i.test(msg) || i >= attempts) throw e;
-      console.log(`      [${label}] rate limited, backing off 45s (attempt ${i})`);
+      if (!TRANSIENT.test(msg) || i >= attempts) throw e;
+      console.log(`      [${label}] transient RPC condition, backing off 45s (attempt ${i})`);
       await sleep(45_000);
     }
   }
@@ -184,6 +189,7 @@ export function fetchLog(runId, sinceMs) {
 
 export function summarizeFetches(rows, t0, t1) {
   const counts = {};
-  for (const r of rows) if (r.t >= t0 && r.t <= t1 && r.status === 200) counts[r.page] = (counts[r.page] ?? 0) + 1;
+  // The harness's own page checks (user agent "node", this host) are not validator fetches.
+  for (const r of rows) if (r.t >= t0 && r.t <= t1 && r.status === 200 && !/^node/i.test(r.ua)) counts[r.page] = (counts[r.page] ?? 0) + 1;
   return counts;
 }

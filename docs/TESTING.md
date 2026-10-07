@@ -44,15 +44,22 @@ prompt injection at every user-controlled surface.
 
 ### What Direct Mode does not catch
 
-It is not sufficient, and pretending otherwise would be dishonest. Two real examples from
+It is not sufficient, and pretending otherwise would be dishonest. Three real examples from
 this build:
 
 1. **`TreeMap.keys()` is not calldata-encodable on chain.** Direct Mode returned the view
    happily; Studio Mode failed the transaction. Fixed by storing an explicit id list.
 2. **`DynArray` cannot be constructed inside a view.** Direct Mode tolerated a local
    `DynArray[dict]`; the storage generator rejected it. Fixed by returning JSON strings.
+3. **A transaction can be `FINALIZED` and still have failed.** The web app passed the promise
+   id as the string `"2"`. In Direct Mode a test passes an int; on chain the contract compared
+   `str` with `int` storage keys and raised `TypeError`, and the transaction reached
+   `FINALIZED` with `execution_result: ERROR` while the app's panel said "Confirmed". The
+   dispatch unit test only asserted the method name, so it could not see either defect. The
+   app now converts integer arguments before signing and reads the validators' execution
+   result before reporting success (`apps/web/tests/chain-writes.test.ts`).
 
-Both were found by running the contract on a real network. That is why Studio Mode is
+All three were found by running against a real network. That is why Studio Mode is
 mandatory, not optional.
 
 ## Prompt-injection testing

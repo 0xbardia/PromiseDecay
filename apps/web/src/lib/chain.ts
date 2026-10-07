@@ -116,6 +116,92 @@ export class WrongNetworkError extends Error {
   }
 }
 
+/** Contract methods whose first argument is the promise id (`promise_id: int`). */
+const PROMISE_ID_METHODS = new Set([
+  "add_evidence",
+  "add_drift",
+  "submit_response",
+  "request_resolution",
+  "challenge",
+  "re_evaluate",
+  "finalize",
+]);
+
+/**
+ * Convert an id or timestamp to the integer the contract's `int` parameters require.
+ *
+ * Route params and API fields carry promise ids as strings, and the SDK encodes a JS string as
+ * a contract `str`. The contract then compares that string with its integer storage keys and
+ * dies with `TypeError: '<' not supported between instances of 'str' and 'int'` — after the
+ * transaction has already been signed, broadcast and finalized.
+ */
+export function toContractInt(value: unknown, what: string): bigint {
+  if (typeof value === "bigint" && value >= 0n) return value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) return BigInt(value.trim());
+  throw new Error(`${what} must be a non-negative integer.`);
+}
+
+/** Coerce a write's integer arguments before it is signed. Everything else passes through. */
+export function normalizeWriteArgs(functionName: string, args: unknown[]): unknown[] {
+  const out = [...args];
+  if (PROMISE_ID_METHODS.has(functionName)) out[0] = toContractInt(out[0], "Promise id");
+  else if (functionName === "create_promise") out[6] = toContractInt(out[6], "Deadline");
+  return out;
+}
+
+export class ContractExecutionError extends Error {
+  constructor(detail: string) {
+    super(`The contract rejected this transaction: ${detail}`);
+    this.name = "ContractExecutionError";
+  }
+}
+
+/**
+ * What the contract actually did with a transaction.
+ *
+ * A GenLayer transaction reaches `FINALIZED` whether the contract method succeeded or raised,
+ * so the transaction status alone says nothing about whether the write took effect. The
+ * validators' receipt carries the execution result. `ok: null` means it could not be read, which
+ * is never treated as success.
+ */
+export function executionOutcome(tx: unknown): { ok: boolean | null; detail: string } {
+  const data = (tx as { consensus_data?: { leader_receipt?: unknown } } | null)?.consensus_data;
+  const receipt = (Array.isArray(data?.leader_receipt) ? data?.leader_receipt[0] : data?.leader_receipt) as
+    | { execution_result?: string; genvm_result?: { stderr?: string } }
+    | undefined;
+  const result = receipt?.execution_result;
+  if (result === "SUCCESS") return { ok: true, detail: "" };
+  if (result === "ERROR") {
+    const lines = String(receipt?.genvm_result?.stderr ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    return { ok: false, detail: (lines[lines.length - 1] ?? "the contract method raised an error").slice(0, 200) };
+  }
+  return { ok: null, detail: "" };
+}
+
+async function readExecutionOutcome(hash: string, signal?: AbortSignal) {
+  // The receipt can lag the FINALIZED status by a moment, so a missing result is retried.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await fetch(RPC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionByHash", params: [hash] }),
+        signal,
+      });
+      const outcome = executionOutcome(((await res.json()) as { result?: unknown }).result);
+      if (outcome.ok !== null) return outcome;
+    } catch {
+      if (signal?.aborted) throw new Error("aborted");
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  return { ok: null as boolean | null, detail: "" };
+}
+
 /** Extract an injected EIP-1193 provider without pulling in a wallet SDK. */
 export function getInjectedProvider(): EIP1193Provider | null {
   if (typeof window === "undefined") return null;
@@ -223,8 +309,9 @@ interface WriteOptions {
  * than an optimistic guess.
  */
 export async function writeContract(opts: WriteOptions): Promise<{ hash: string; state: string }> {
-  const { functionName, args, onProgress, signal } = opts;
+  const { functionName, onProgress, signal } = opts;
   const report = (p: TxProgress) => onProgress?.(p);
+  const args = normalizeWriteArgs(functionName, opts.args);
 
   const provider = getInjectedProvider();
   if (!provider) {
@@ -304,7 +391,13 @@ export async function writeContract(opts: WriteOptions): Promise<{ hash: string;
       const body = (await res.json()) as { result?: string; error?: { message?: string } };
       if (body.error?.message) throw new Error(body.error.message);
       const state = body.result ?? "";
-      report({ stage: stageFor(state), hash, message: STAGE_COPY[stageFor(state)] });
+      // FINALIZED is only consensus completing. The "final" stage is reserved for a write whose
+      // contract execution has been checked, so until then it reads as still verifying.
+      if (state === "FINALIZED") {
+        report({ stage: "accepted", hash, message: "Finalized by consensus. Checking the contract's result." });
+      } else {
+        report({ stage: stageFor(state), hash, message: STAGE_COPY[stageFor(state)] });
+      }
       if (TERMINAL_STATES.has(state)) return state;
       await new Promise((r) => setTimeout(r, 3000));
     }
@@ -314,6 +407,18 @@ export async function writeContract(opts: WriteOptions): Promise<{ hash: string;
   if (state !== "FINALIZED") {
     report({ stage: "failed", hash, message: `Transaction ended as ${state}.` });
     throw new Error(`Transaction ended as ${state}.`);
+  }
+
+  // FINALIZED only means consensus finished. Confirm the contract method itself succeeded
+  // before telling anyone the write took effect.
+  const outcome = await readExecutionOutcome(hash, signal);
+  if (outcome.ok !== true) {
+    const message =
+      outcome.ok === false
+        ? new ContractExecutionError(outcome.detail).message
+        : "The transaction finalized, but its execution result could not be verified, so it is not reported as successful.";
+    report({ stage: "failed", hash, message });
+    throw outcome.ok === false ? new ContractExecutionError(outcome.detail) : new Error(message);
   }
   report({ stage: "final", hash, message: STAGE_COPY.final });
   return { hash, state };
@@ -332,20 +437,21 @@ export async function readPromiseContractState(id: string): Promise<Partial<ApiP
     })) as unknown as T;
   const parse = <T,>(raw: unknown): T =>
     (typeof raw === "string" ? JSON.parse(raw) : raw) as T;
+  const pid = toContractInt(id, "Promise id");
 
-  const lifecycle = await read<string>("get_lifecycle_status", [id]);
+  const lifecycle = await read<string>("get_lifecycle_status", [pid]);
   const hasResult = ["RESOLVING", "PROVISIONAL", "CHALLENGE_WINDOW", "FINAL"].includes(lifecycle);
   const [evidenceRaw, driftRaw, responsesRaw, challengesRaw, window] = await Promise.all([
-    read<string | unknown[]>("get_evidence", [id]),
-    read<string | unknown[]>("get_drift", [id]),
-    read<string | unknown[]>("get_responses", [id]),
-    read<string | unknown[]>("get_challenges", [id]),
-    read<{ challenge_closes_at: string }>("get_challenge_window", [id]),
+    read<string | unknown[]>("get_evidence", [pid]),
+    read<string | unknown[]>("get_drift", [pid]),
+    read<string | unknown[]>("get_responses", [pid]),
+    read<string | unknown[]>("get_challenges", [pid]),
+    read<{ challenge_closes_at: string }>("get_challenge_window", [pid]),
   ]);
   const result = hasResult
     ? await read<Record<string, unknown>>(
         lifecycle === "FINAL" ? "get_final_result" : "get_provisional_result",
-        [id]
+        [pid]
       )
     : null;
   const evidence = parse<Array<Record<string, unknown>>>(evidenceRaw);
